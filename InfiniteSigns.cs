@@ -53,7 +53,6 @@ namespace InfiniteSigns
                 ServerHooks.Leave -= OnLeave;
             }
         }
-
         public override void Initialize()
         {
             NetHooks.GetData += OnGetData;
@@ -63,85 +62,76 @@ namespace InfiniteSigns
 
         void OnGetData(GetDataEventArgs e)
         {
-            switch (e.MsgID)
+            if (!e.Handled)
             {
-                case PacketTypes.SignNew:
-                    {
-                        string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 10);
-                        ThreadPool.QueueUserWorkItem(ModSignCallback,
-                            new SignArgs { plr = TShock.Players[e.Msg.whoAmI], text = text });
-                        e.Handled = true;
-                    }
-                    break;
-                case PacketTypes.SignRead:
-                    {
-                        int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
-                        int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-                        SignPosition[e.Msg.whoAmI] = new Vector2(X, Y);
-                        ThreadPool.QueueUserWorkItem(GetSignCallback,
-                            new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
-                        e.Handled = true;
-                    }
-                    break;
-                case PacketTypes.Tile:
-                    {
-                        int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-                        int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-                        if (X < 0 || Y < 0 || X >= Main.maxTilesX || Y >= Main.maxTilesY)
+                switch (e.MsgID)
+                {
+                    case PacketTypes.SignNew:
                         {
-                            return;
+                            string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 10);
+                            ThreadPool.QueueUserWorkItem(ModSignCallback,
+                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], text = text });
+                            e.Handled = true;
                         }
-                        if (e.Msg.readBuffer[e.Index] == 0)
+                        break;
+                    case PacketTypes.SignRead:
                         {
-                            if (CheckSign(X, Y, e))
+                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
+                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
+                            SignPosition[e.Msg.whoAmI] = new Vector2(X, Y);
+                            ThreadPool.QueueUserWorkItem(GetSignCallback,
+                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                            e.Handled = true;
+                        }
+                        break;
+                    case PacketTypes.Tile:
+                        {
+                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
+                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
+                            if (X < 0 || Y < 0 || X >= Main.maxTilesX || Y >= Main.maxTilesY)
                             {
-                                e.Handled = true;
                                 return;
                             }
-                            if (CheckSign(X - 1, Y, e))
+                            if (e.Msg.readBuffer[e.Index] == 0)
                             {
-                                e.Handled = true;
+                                if (CheckSign(X, Y, ref e))
+                                {
+                                    return;
+                                }
+                                CheckSign(X - 1, Y, ref e);
+                                CheckSign(X + 1, Y, ref e);
+                                CheckSign(X, Y - 1, ref e);
+                                CheckSign(X, Y + 1, ref e);
                             }
-                            if (CheckSign(X + 1, Y, e))
+                            else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
                             {
-                                e.Handled = true;
-                            }
-                            if (CheckSign(X, Y - 1, e))
-                            {
-                                e.Handled = true;
-                            }
-                            if (CheckSign(X, Y + 1, e))
-                            {
-                                e.Handled = true;
+                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
+                                {
+                                    WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    if (Main.tile[X, Y].frameY != 0)
+                                    {
+                                        Y--;
+                                    }
+                                    if (Main.tile[X, Y].frameX % 36 != 0)
+                                    {
+                                        X--;
+                                    }
+                                    ThreadPool.QueueUserWorkItem(PlaceSignCallback,
+                                        new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                                    TSPlayer.All.SendTileSquare(X, Y, 3);
+                                    e.Handled = true;
+                                }
                             }
                         }
-                        else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
-                        {
-                            if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
-                            {
-                                WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
-                                if (Main.tile[X, Y].frameY != 0)
-                                {
-                                    Y--;
-                                }
-                                if (Main.tile[X, Y].frameX % 36 != 0)
-                                {
-                                    X--;
-                                }
-                                ThreadPool.QueueUserWorkItem(PlaceSignCallback,
-                                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
-                                TSPlayer.All.SendTileSquare(X, Y, 3);
-                                e.Handled = true;
-                            }
-                        }
-                    }
-                    break;
+                        break;
+                }
             }
         }
         void OnInitialize()
         {
             Commands.ChatCommands.Add(new Command("maintenance", ConvertSigns, "convsigns"));
             Commands.ChatCommands.Add(new Command("protectsign", Deselect, "sdeselect"));
+            Commands.ChatCommands.Add(new Command("showsigninfo", Info, "sinfo"));
             Commands.ChatCommands.Add(new Command("protectsign", Protect, "sprotect"));
             Commands.ChatCommands.Add(new Command("protectsign", Unprotect, "sunprotect"));
 
@@ -181,7 +171,7 @@ namespace InfiniteSigns
 
         void ConvertCallback(object t)
         {
-            Database.QueryReader("DELETE FROM Signs");
+            Database.QueryReader("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
             int converted = 0;
             foreach (Terraria.Sign s in Main.sign)
             {
@@ -214,6 +204,10 @@ namespace InfiniteSigns
                     };
                     switch (Action[s.plr.Index])
                     {
+                        case SignAction.INFO:
+                            s.plr.SendMessage(string.Format("X: {0} Y: {1} Account: {2}",
+                                (int)s.loc.X, (int)s.loc.Y, sign.account == "" ? "N/A" : sign.account), Color.Yellow);
+                            break;
                         case SignAction.PROTECT:
                             if (sign.account != "")
                             {
@@ -242,7 +236,7 @@ namespace InfiniteSigns
                             break;
                         default:
                             string text = query.Get<string>("Text");
-                            if (text.Length != 0)
+                            if (text.Length != 0 && text[text.Length - 1] == '\0')
                             {
                                 text = text.Substring(0, text.Length - 1);
                             }
@@ -321,6 +315,11 @@ namespace InfiniteSigns
             Action[e.Player.Index] = SignAction.NONE;
             e.Player.SendMessage("Stopped selecting a sign.");
         }
+        void Info(CommandArgs e)
+        {
+            Action[e.Player.Index] = SignAction.INFO;
+            e.Player.SendMessage("Read a sign to get its info.");
+        }
         void Protect(CommandArgs e)
         {
             Action[e.Player.Index] = SignAction.PROTECT;
@@ -332,7 +331,7 @@ namespace InfiniteSigns
             e.Player.SendMessage("Read a sign to unprotect it.");
         }
 
-        bool CheckSign(int X, int Y, GetDataEventArgs e)
+        bool CheckSign(int X, int Y, ref GetDataEventArgs e)
         {
             if (X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && (Main.tile[X, Y].type == 55 || Main.tile[X, Y].type == 85))
             {

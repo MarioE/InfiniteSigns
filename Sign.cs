@@ -17,5 +17,6 @@ namespace InfiniteSigns
         NONE,
         PROTECT,
         UNPROTECT,
+        INFO
     }
 }
