@@ -85,12 +85,41 @@ namespace InfiniteSigns
                     break;
                 case PacketTypes.Tile:
                     {
+                        int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
+                        int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
+                        if (X < 0 || Y < 0 || X >= Main.maxTilesX || Y >= Main.maxTilesY)
+                        {
+                            return;
+                        }
                         if (e.Msg.readBuffer[e.Index] == 0)
                         {
-                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-                            if (Main.tile[X, Y].type == 55 || Main.tile[X, Y].type == 85)
+                            if (CheckSign(X, Y, e))
                             {
+                                e.Handled = true;
+                                return;
+                            }
+                            if (CheckSign(X - 1, Y, e))
+                            {
+                                e.Handled = true;
+                            }
+                            if (CheckSign(X + 1, Y, e))
+                            {
+                                e.Handled = true;
+                            }
+                            if (CheckSign(X, Y - 1, e))
+                            {
+                                e.Handled = true;
+                            }
+                            if (CheckSign(X, Y + 1, e))
+                            {
+                                e.Handled = true;
+                            }
+                        }
+                        else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
+                        {
+                            if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
+                            {
+                                WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
                                 if (Main.tile[X, Y].frameY != 0)
                                 {
                                     Y--;
@@ -99,19 +128,8 @@ namespace InfiniteSigns
                                 {
                                     X--;
                                 }
-                                ThreadPool.QueueUserWorkItem(KillSignCallback,
-                                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
-                            }
-                        }
-                        else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
-                        {
-                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-                            if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
-                            {
                                 ThreadPool.QueueUserWorkItem(PlaceSignCallback,
-                                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y - 1) });
-                                WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
                                 TSPlayer.All.SendTileSquare(X, Y, 3);
                                 e.Handled = true;
                             }
@@ -213,7 +231,7 @@ namespace InfiniteSigns
                                 break;
                             }
                             if (sign.account != s.plr.UserAccountName &&
-                                s.plr.Group.HasPermission("removesignprotection"))
+                                !s.plr.Group.HasPermission("removesignprotection"))
                             {
                                 s.plr.SendMessage("This sign is not yours.");
                                 break;
@@ -255,10 +273,12 @@ namespace InfiniteSigns
                     if (account != s.plr.UserAccountName && account != "")
                     {
                         s.plr.SendMessage("This sign is protected.", Color.Red);
-                        s.plr.SendTileSquare((int)s.loc.X, (int)s.loc.Y, 3);
+                        s.plr.SendTileSquare((int)s.loc.X, (int)s.loc.Y, 5);
                         return;
                     }
                     Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", (int)s.loc.X, (int)s.loc.Y, Main.worldID);
+                    WorldGen.KillTile((int)s.loc.X, (int)s.loc.Y);
+                    TSPlayer.All.SendTileSquare((int)s.loc.X, (int)s.loc.Y, 3);
                     return;
                 }
             }
@@ -272,7 +292,7 @@ namespace InfiniteSigns
                 while (query.Read())
                 {
                     string account = query.Get<string>("Account");
-                    if (account != s.plr.UserAccountName && account != "" && s.plr.Group.HasPermission("editallsigns"))
+                    if (account != s.plr.UserAccountName && account != "" && !s.plr.Group.HasPermission("editallsigns"))
                     {
                         s.plr.SendMessage("This sign is protected.", Color.Red);
                         return;
@@ -310,6 +330,26 @@ namespace InfiniteSigns
         {
             Action[e.Player.Index] = SignAction.UNPROTECT;
             e.Player.SendMessage("Read a sign to unprotect it.");
+        }
+
+        bool CheckSign(int X, int Y, GetDataEventArgs e)
+        {
+            if (X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && (Main.tile[X, Y].type == 55 || Main.tile[X, Y].type == 85))
+            {
+                if (Main.tile[X, Y].frameY != 0)
+                {
+                    Y--;
+                }
+                if (Main.tile[X, Y].frameX % 36 != 0)
+                {
+                    X--;
+                }
+                ThreadPool.QueueUserWorkItem(KillSignCallback,
+                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                e.Handled = true;
+                return true;
+            }
+            return false;
         }
 
         private class SignArgs
