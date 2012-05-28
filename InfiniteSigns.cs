@@ -92,7 +92,7 @@ namespace InfiniteSigns
                             {
                                 return;
                             }
-                            if (e.Msg.readBuffer[e.Index] == 0)
+                            if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 0)
                             {
                                 if (CheckSign(X, Y, ref e))
                                 {
@@ -236,7 +236,7 @@ namespace InfiniteSigns
                             break;
                         default:
                             string text = query.Get<string>("Text");
-                            if (text.Length != 0 && text[text.Length - 1] == '\0')
+                            if (text.Length != 0)
                             {
                                 text = text.Substring(0, text.Length - 1);
                             }
