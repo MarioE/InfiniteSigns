@@ -259,72 +259,81 @@ namespace InfiniteSigns
             SignArgs s = (SignArgs)t;
             bool[] attached = new bool[4];
             bool[] attachedNext = new bool[4];
-            Point signPos = Point.Zero;
+            List<Point> positions = new List<Point>();
             if (Main.tile[s.loc.X, s.loc.Y].IsSign())
             {
-                signPos = Sign.GetSign(s.loc.X, s.loc.Y);
+                positions.Add(Sign.GetSign(s.loc.X, s.loc.Y));
+                if (TryKillSign(positions[0].X, positions[0].Y, s.plr))
+                {
+                    WorldGen.KillTile(s.loc.X, s.loc.Y);
+                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 3);
+                }
+                else
+                {
+                    s.plr.SendMessage("This sign is protected.", Color.Red);
+                    s.plr.SendTileSquare(s.loc.X, s.loc.Y, 5);
+                }
             }
             else
             {
                 if (Main.tile.Valid(s.loc.X - 1, s.loc.Y) && Main.tile[s.loc.X - 1, s.loc.Y].IsSign())
                 {
-                    signPos = Sign.GetSign(s.loc.X - 1, s.loc.Y);
+                    positions.Add(Sign.GetSign(s.loc.X - 1, s.loc.Y));
                 }
-                else if (Main.tile.Valid(s.loc.X + 1, s.loc.Y) && Main.tile[s.loc.X + 1, s.loc.Y].IsSign())
+                if (Main.tile.Valid(s.loc.X + 1, s.loc.Y) && Main.tile[s.loc.X + 1, s.loc.Y].IsSign())
                 {
-                    signPos = Sign.GetSign(s.loc.X + 1, s.loc.Y);
+                    positions.Add(Sign.GetSign(s.loc.X + 1, s.loc.Y));
                 }
-                else if (Main.tile.Valid(s.loc.X, s.loc.Y - 1) && Main.tile[s.loc.X, s.loc.Y - 1].IsSign())
+                if (Main.tile.Valid(s.loc.X, s.loc.Y - 1) && Main.tile[s.loc.X, s.loc.Y - 1].IsSign())
                 {
-                    signPos = Sign.GetSign(s.loc.X, s.loc.Y - 1);
+                    positions.Add(Sign.GetSign(s.loc.X, s.loc.Y - 1));
                 }
-                else if (Main.tile.Valid(s.loc.X, s.loc.Y + 1) && Main.tile[s.loc.X, s.loc.Y + 1].IsSign())
+                if (Main.tile.Valid(s.loc.X, s.loc.Y + 1) && Main.tile[s.loc.X, s.loc.Y + 1].IsSign())
                 {
-                    signPos = Sign.GetSign(s.loc.X , s.loc.Y + 1);
+                    positions.Add(Sign.GetSign(s.loc.X , s.loc.Y + 1));
                 }
-                attached[0] = Main.tile.Valid(signPos.X, signPos.Y + 2) && Main.tile[signPos.X, signPos.Y + 2].IsSolid()
-                    && Main.tile.Valid(signPos.X + 1, signPos.Y + 2) && Main.tile[signPos.X + 1, signPos.Y + 2].IsSolid();
-                attached[1] = Main.tile.Valid(signPos.X, signPos.Y - 1) && Main.tile[signPos.X, signPos.Y - 1].IsSolid()
-                    && Main.tile.Valid(signPos.X + 1, signPos.Y - 1) && Main.tile[signPos.X + 1, signPos.Y - 1].IsSolid();
-                attached[2] = Main.tile.Valid(signPos.X - 1, signPos.Y) && Main.tile[signPos.X - 1, signPos.Y].IsSolid()
-                    && Main.tile.Valid(signPos.X - 1, signPos.Y + 1) && Main.tile[signPos.X - 1, signPos.Y + 1].IsSolid();
-                attached[3] = Main.tile.Valid(signPos.X + 2, signPos.Y) && Main.tile[signPos.X + 2, signPos.Y].IsSolid()
-                    && Main.tile.Valid(signPos.X + 2, signPos.Y + 1) && Main.tile[signPos.X + 2, signPos.Y + 1].IsSolid();
-                bool prev = Main.tile[s.loc.X, s.loc.Y].active;
-                Main.tile[s.loc.X, s.loc.Y].active = false;
-                attachedNext[0] = Main.tile.Valid(signPos.X, signPos.Y + 2) && Main.tile[signPos.X, signPos.Y + 2].IsSolid()
-                    && Main.tile.Valid(signPos.X + 1, signPos.Y + 2) && Main.tile[signPos.X + 1, signPos.Y + 2].IsSolid();
-                attachedNext[1] = Main.tile.Valid(signPos.X, signPos.Y - 1) && Main.tile[signPos.X, signPos.Y - 1].IsSolid()
-                    && Main.tile.Valid(signPos.X + 1, signPos.Y - 1) && Main.tile[signPos.X + 1, signPos.Y - 1].IsSolid();
-                attachedNext[2] = Main.tile.Valid(signPos.X - 1, signPos.Y) && Main.tile[signPos.X - 1, signPos.Y].IsSolid()
-                    && Main.tile.Valid(signPos.X - 1, signPos.Y + 1) && Main.tile[signPos.X - 1, signPos.Y + 1].IsSolid();
-                attachedNext[3] = Main.tile.Valid(signPos.X + 2, signPos.Y) && Main.tile[signPos.X + 2, signPos.Y].IsSolid()
-                    && Main.tile.Valid(signPos.X + 2, signPos.Y + 1) && Main.tile[signPos.X + 2, signPos.Y + 1].IsSolid();
-                Main.tile[s.loc.X, s.loc.Y].active = prev;
-                if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
+                bool killTile = true;
+                foreach (Point p in positions)
                 {
-                    WorldGen.KillTile(s.loc.X, s.loc.Y);
-                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 1);
-                    return;
-                }
-            }
-            using (QueryResult query = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                signPos.X, signPos.Y, Main.worldID))
-            {
-                while (query.Read())
-                {
-                    string account = query.Get<string>("Account");
-                    if (account != s.plr.UserAccountName && account != "")
+                    attached[0] = Main.tile.Valid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
+                        && Main.tile.Valid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
+                    attached[1] = Main.tile.Valid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
+                        && Main.tile.Valid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
+                    attached[2] = Main.tile.Valid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
+                        && Main.tile.Valid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
+                    attached[3] = Main.tile.Valid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
+                        && Main.tile.Valid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
+                    bool prev = Main.tile[s.loc.X, s.loc.Y].active;
+                    Main.tile[s.loc.X, s.loc.Y].active = false;
+                    attachedNext[0] = Main.tile.Valid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
+                        && Main.tile.Valid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
+                    attachedNext[1] = Main.tile.Valid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
+                        && Main.tile.Valid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
+                    attachedNext[2] = Main.tile.Valid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
+                        && Main.tile.Valid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
+                    attachedNext[3] = Main.tile.Valid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
+                        && Main.tile.Valid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
+                    Main.tile[s.loc.X, s.loc.Y].active = prev;
+                    if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
+                    {
+                        continue;
+                    }
+                    if (TryKillSign(p.X, p.Y, s.plr))
+                    {
+                        WorldGen.KillTile(p.X, p.Y);
+                        TSPlayer.All.SendTileSquare(p.X, p.Y, 3);
+                    }
+                    else
                     {
                         s.plr.SendMessage("This sign is protected.", Color.Red);
                         s.plr.SendTileSquare(s.loc.X, s.loc.Y, 5);
-                        return;
+                        killTile = false;
                     }
-                    Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", signPos.X, signPos.Y, Main.worldID);
-                    WorldGen.KillTile(signPos.X, signPos.Y);
-                    TSPlayer.All.SendTileSquare(signPos.X, signPos.Y, 3);
+                }
+                if (killTile)
+                {
                     WorldGen.KillTile(s.loc.X, s.loc.Y);
-                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 4);
+                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 1);
                 }
             }
         }
@@ -353,6 +362,24 @@ namespace InfiniteSigns
             Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
                 s.loc.X, s.loc.Y, s.plr.IsLoggedIn ? s.plr.UserAccountName : "", Main.worldID);
             Main.sign[999] = null;
+        }
+        bool TryKillSign(int X, int Y, TSPlayer plr)
+        {
+            using (QueryResult query = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                while (query.Read())
+                {
+                    string account = query.Get<string>("Account");
+                    if (account != plr.UserAccountName && account != "")
+                    {
+                        return false;
+                    }
+                    Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
+                    return true;
+                }
+                return false;
+            }
         }
 
         void ConvertSigns(CommandArgs e)
