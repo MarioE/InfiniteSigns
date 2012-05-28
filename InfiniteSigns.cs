@@ -182,10 +182,6 @@ namespace InfiniteSigns
                     converted++;
                 }
             }
-            for (int i = 0; i < 1000; i++)
-            {
-                Main.sign[i] = null;
-            }
             ((SignArgs)t).plr.SendMessage("Converted " + converted + " signs.");
         }
         void GetSignCallback(object t)
