@@ -378,7 +378,7 @@ namespace InfiniteSigns
                     Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
                     return true;
                 }
-                return false;
+                return true;
             }
         }
 
