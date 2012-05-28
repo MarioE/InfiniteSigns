@@ -32,7 +32,7 @@ namespace InfiniteSigns
         {
             get { return "InfiniteSigns"; }
         }
-        public static Vector2[] SignPosition = new Vector2[256];
+        public static bool[] SignNum = new bool[256];
         public override Version Version
         {
             get { return Assembly.GetExecutingAssembly().GetName().Version; }
@@ -68,9 +68,11 @@ namespace InfiniteSigns
                 {
                     case PacketTypes.SignNew:
                         {
+                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 2);
+                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 6);
                             string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 10);
                             ThreadPool.QueueUserWorkItem(ModSignCallback,
-                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], text = text });
+                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Point(X, Y), text = text });
                             e.Handled = true;
                         }
                         break;
@@ -78,9 +80,8 @@ namespace InfiniteSigns
                         {
                             int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
                             int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-                            SignPosition[e.Msg.whoAmI] = new Vector2(X, Y);
                             ThreadPool.QueueUserWorkItem(GetSignCallback,
-                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                                new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Point(X, Y) });
                             e.Handled = true;
                         }
                         break;
@@ -94,14 +95,12 @@ namespace InfiniteSigns
                             }
                             if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 0)
                             {
-                                if (CheckSign(X, Y, ref e))
+                                if (Sign.Nearby(X, Y))
                                 {
-                                    return;
+                                    ThreadPool.QueueUserWorkItem(KillSignCallback,
+                                        new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Point(X, Y) });
+                                    e.Handled = true;
                                 }
-                                CheckSign(X - 1, Y, ref e);
-                                CheckSign(X + 1, Y, ref e);
-                                CheckSign(X, Y - 1, ref e);
-                                CheckSign(X, Y + 1, ref e);
                             }
                             else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
                             {
@@ -117,7 +116,7 @@ namespace InfiniteSigns
                                         X--;
                                     }
                                     ThreadPool.QueueUserWorkItem(PlaceSignCallback,
-                                        new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                                        new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Point(X, Y) });
                                     TSPlayer.All.SendTileSquare(X, Y, 3);
                                     e.Handled = true;
                                 }
@@ -166,7 +165,7 @@ namespace InfiniteSigns
         void OnLeave(int index)
         {
             Action[index] = SignAction.NONE;
-            SignPosition[index] = Vector2.Zero;
+            SignNum[index] = false;
         }
 
         void ConvertCallback(object t)
@@ -189,7 +188,7 @@ namespace InfiniteSigns
             SignArgs s = (SignArgs)t;
 
             using (QueryResult query = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                (int)s.loc.X, (int)s.loc.Y, Main.worldID))
+                s.loc.X, s.loc.Y, Main.worldID))
             {
                 while (query.Read())
                 {
@@ -202,7 +201,7 @@ namespace InfiniteSigns
                     {
                         case SignAction.INFO:
                             s.plr.SendMessage(string.Format("X: {0} Y: {1} Account: {2}",
-                                (int)s.loc.X, (int)s.loc.Y, sign.account == "" ? "N/A" : sign.account), Color.Yellow);
+                                s.loc.X, s.loc.Y, sign.account == "" ? "N/A" : sign.account), Color.Yellow);
                             break;
                         case SignAction.PROTECT:
                             if (sign.account != "")
@@ -211,7 +210,7 @@ namespace InfiniteSigns
                                 break;
                             }
                             Database.Query("UPDATE Signs SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                                s.plr.UserAccountName, (int)s.loc.X, (int)s.loc.Y, Main.worldID);
+                                s.plr.UserAccountName, s.loc.X, s.loc.Y, Main.worldID);
                             s.plr.SendMessage("This sign is now protected.");
                             break;
                         case SignAction.UNPROTECT:
@@ -227,7 +226,7 @@ namespace InfiniteSigns
                                 break;
                             }
                             Database.Query("UPDATE Signs SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                                (int)s.loc.X, (int)s.loc.Y, Main.worldID);
+                                s.loc.X, s.loc.Y, Main.worldID);
                             s.plr.SendMessage("This sign is now unprotected.");
                             break;
                         default:
@@ -239,12 +238,16 @@ namespace InfiniteSigns
                             byte[] utf8 = Encoding.UTF8.GetBytes(text);
                             byte[] raw = new byte[15 + utf8.Length];
                             Buffer.BlockCopy(BitConverter.GetBytes(utf8.Length + 11), 0, raw, 0, 4);
+                            if (SignNum[s.plr.Index])
+                            {
+                                raw[5] = 1;
+                            }
                             raw[4] = 47;
-                            Buffer.BlockCopy(BitConverter.GetBytes((int)s.loc.X), 0, raw, 7, 4);
-                            Buffer.BlockCopy(BitConverter.GetBytes((int)s.loc.Y), 0, raw, 11, 4);
+                            Buffer.BlockCopy(BitConverter.GetBytes(s.loc.X), 0, raw, 7, 4);
+                            Buffer.BlockCopy(BitConverter.GetBytes(s.loc.Y), 0, raw, 11, 4);
                             Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
                             s.plr.SendRawData(raw);
-                            SignPosition[s.plr.Index] = s.loc;
+                            SignNum[s.plr.Index] = !SignNum[s.plr.Index];
                             break;
                     }
                     Action[s.plr.Index] = SignAction.NONE;
@@ -254,8 +257,59 @@ namespace InfiniteSigns
         void KillSignCallback(object t)
         {
             SignArgs s = (SignArgs)t;
+            bool[] attached = new bool[4];
+            bool[] attachedNext = new bool[4];
+            Point signPos = Point.Zero;
+            if (Main.tile[s.loc.X, s.loc.Y].IsSign())
+            {
+                signPos = Sign.GetSign(s.loc.X, s.loc.Y);
+            }
+            else
+            {
+                if (Main.tile.Valid(s.loc.X - 1, s.loc.Y) && Main.tile[s.loc.X - 1, s.loc.Y].IsSign())
+                {
+                    signPos = Sign.GetSign(s.loc.X - 1, s.loc.Y);
+                }
+                else if (Main.tile.Valid(s.loc.X + 1, s.loc.Y) && Main.tile[s.loc.X + 1, s.loc.Y].IsSign())
+                {
+                    signPos = Sign.GetSign(s.loc.X + 1, s.loc.Y);
+                }
+                else if (Main.tile.Valid(s.loc.X, s.loc.Y - 1) && Main.tile[s.loc.X, s.loc.Y - 1].IsSign())
+                {
+                    signPos = Sign.GetSign(s.loc.X, s.loc.Y - 1);
+                }
+                else if (Main.tile.Valid(s.loc.X, s.loc.Y + 1) && Main.tile[s.loc.X, s.loc.Y + 1].IsSign())
+                {
+                    signPos = Sign.GetSign(s.loc.X , s.loc.Y + 1);
+                }
+                attached[0] = Main.tile.Valid(signPos.X, signPos.Y + 2) && Main.tile[signPos.X, signPos.Y + 2].IsSolid()
+                    && Main.tile.Valid(signPos.X + 1, signPos.Y + 2) && Main.tile[signPos.X + 1, signPos.Y + 2].IsSolid();
+                attached[1] = Main.tile.Valid(signPos.X, signPos.Y - 1) && Main.tile[signPos.X, signPos.Y - 1].IsSolid()
+                    && Main.tile.Valid(signPos.X + 1, signPos.Y - 1) && Main.tile[signPos.X + 1, signPos.Y - 1].IsSolid();
+                attached[2] = Main.tile.Valid(signPos.X - 1, signPos.Y) && Main.tile[signPos.X - 1, signPos.Y].IsSolid()
+                    && Main.tile.Valid(signPos.X - 1, signPos.Y + 1) && Main.tile[signPos.X - 1, signPos.Y + 1].IsSolid();
+                attached[3] = Main.tile.Valid(signPos.X + 2, signPos.Y) && Main.tile[signPos.X + 2, signPos.Y].IsSolid()
+                    && Main.tile.Valid(signPos.X + 2, signPos.Y + 1) && Main.tile[signPos.X + 2, signPos.Y + 1].IsSolid();
+                bool prev = Main.tile[s.loc.X, s.loc.Y].active;
+                Main.tile[s.loc.X, s.loc.Y].active = false;
+                attachedNext[0] = Main.tile.Valid(signPos.X, signPos.Y + 2) && Main.tile[signPos.X, signPos.Y + 2].IsSolid()
+                    && Main.tile.Valid(signPos.X + 1, signPos.Y + 2) && Main.tile[signPos.X + 1, signPos.Y + 2].IsSolid();
+                attachedNext[1] = Main.tile.Valid(signPos.X, signPos.Y - 1) && Main.tile[signPos.X, signPos.Y - 1].IsSolid()
+                    && Main.tile.Valid(signPos.X + 1, signPos.Y - 1) && Main.tile[signPos.X + 1, signPos.Y - 1].IsSolid();
+                attachedNext[2] = Main.tile.Valid(signPos.X - 1, signPos.Y) && Main.tile[signPos.X - 1, signPos.Y].IsSolid()
+                    && Main.tile.Valid(signPos.X - 1, signPos.Y + 1) && Main.tile[signPos.X - 1, signPos.Y + 1].IsSolid();
+                attachedNext[3] = Main.tile.Valid(signPos.X + 2, signPos.Y) && Main.tile[signPos.X + 2, signPos.Y].IsSolid()
+                    && Main.tile.Valid(signPos.X + 2, signPos.Y + 1) && Main.tile[signPos.X + 2, signPos.Y + 1].IsSolid();
+                Main.tile[s.loc.X, s.loc.Y].active = prev;
+                if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
+                {
+                    WorldGen.KillTile(s.loc.X, s.loc.Y);
+                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 1);
+                    return;
+                }
+            }
             using (QueryResult query = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                (int)s.loc.X, (int)s.loc.Y, Main.worldID))
+                signPos.X, signPos.Y, Main.worldID))
             {
                 while (query.Read())
                 {
@@ -263,13 +317,14 @@ namespace InfiniteSigns
                     if (account != s.plr.UserAccountName && account != "")
                     {
                         s.plr.SendMessage("This sign is protected.", Color.Red);
-                        s.plr.SendTileSquare((int)s.loc.X, (int)s.loc.Y, 5);
+                        s.plr.SendTileSquare(s.loc.X, s.loc.Y, 5);
                         return;
                     }
-                    Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", (int)s.loc.X, (int)s.loc.Y, Main.worldID);
-                    WorldGen.KillTile((int)s.loc.X, (int)s.loc.Y);
-                    TSPlayer.All.SendTileSquare((int)s.loc.X, (int)s.loc.Y, 3);
-                    return;
+                    Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", signPos.X, signPos.Y, Main.worldID);
+                    WorldGen.KillTile(signPos.X, signPos.Y);
+                    TSPlayer.All.SendTileSquare(signPos.X, signPos.Y, 3);
+                    WorldGen.KillTile(s.loc.X, s.loc.Y);
+                    TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 4);
                 }
             }
         }
@@ -277,7 +332,7 @@ namespace InfiniteSigns
         {
             SignArgs s = (SignArgs)t;
             using (QueryResult query = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                (int)SignPosition[s.plr.Index].X, (int)SignPosition[s.plr.Index].Y, Main.worldID))
+                s.loc.X, s.loc.Y, Main.worldID))
             {
                 while (query.Read())
                 {
@@ -288,8 +343,7 @@ namespace InfiniteSigns
                         return;
                     }
                     Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                        s.text, (int)SignPosition[s.plr.Index].X, (int)SignPosition[s.plr.Index].Y, Main.worldID);
-                    return;
+                        s.text, s.loc.X, s.loc.Y, Main.worldID);
                 }
             }
         }
@@ -297,7 +351,7 @@ namespace InfiniteSigns
         {
             SignArgs s = (SignArgs)t;
             Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
-                (int)s.loc.X, (int)s.loc.Y, s.plr.IsLoggedIn ? s.plr.UserAccountName : "", Main.worldID);
+                s.loc.X, s.loc.Y, s.plr.IsLoggedIn ? s.plr.UserAccountName : "", Main.worldID);
             Main.sign[999] = null;
         }
 
@@ -327,29 +381,9 @@ namespace InfiniteSigns
             e.Player.SendMessage("Read a sign to unprotect it.");
         }
 
-        bool CheckSign(int X, int Y, ref GetDataEventArgs e)
-        {
-            if (X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && (Main.tile[X, Y].type == 55 || Main.tile[X, Y].type == 85))
-            {
-                if (Main.tile[X, Y].frameY != 0)
-                {
-                    Y--;
-                }
-                if (Main.tile[X, Y].frameX % 36 != 0)
-                {
-                    X--;
-                }
-                ThreadPool.QueueUserWorkItem(KillSignCallback,
-                    new SignArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
-                e.Handled = true;
-                return true;
-            }
-            return false;
-        }
-
         private class SignArgs
         {
-            public Vector2 loc;
+            public Point loc;
             public TSPlayer plr;
             public string text;
         }
