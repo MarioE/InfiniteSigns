@@ -129,10 +129,10 @@ namespace InfiniteSigns
         void OnInitialize()
         {
             Commands.ChatCommands.Add(new Command("maintenance", ConvertSigns, "convsigns"));
-            Commands.ChatCommands.Add(new Command("protectsign", Deselect, "sdeselect"));
+            Commands.ChatCommands.Add(new Command("protectsign", Deselect, "scset"));
             Commands.ChatCommands.Add(new Command("showsigninfo", Info, "sinfo"));
-            Commands.ChatCommands.Add(new Command("protectsign", Protect, "sprotect"));
-            Commands.ChatCommands.Add(new Command("protectsign", Unprotect, "sunprotect"));
+            Commands.ChatCommands.Add(new Command("protectsign", Protect, "sset"));
+            Commands.ChatCommands.Add(new Command("protectsign", Unprotect, "sunset"));
 
             switch (TShock.Config.StorageType.ToLower())
             {
@@ -222,7 +222,7 @@ namespace InfiniteSigns
                             if (sign.account != s.plr.UserAccountName &&
                                 !s.plr.Group.HasPermission("removesignprotection"))
                             {
-                                s.plr.SendMessage("This sign is not yours.");
+                                s.plr.SendMessage("This sign is not yours.", Color.Red);
                                 break;
                             }
                             Database.Query("UPDATE Signs SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
