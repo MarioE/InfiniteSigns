@@ -330,7 +330,7 @@ namespace InfiniteSigns
                         killTile = false;
                     }
                 }
-                if (killTile)
+                if (killTile && Main.tile[s.loc.X, s.loc.Y] != null)
                 {
                     WorldGen.KillTile(s.loc.X, s.loc.Y);
                     TSPlayer.All.SendTileSquare(s.loc.X, s.loc.Y, 1);
