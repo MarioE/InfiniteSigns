@@ -58,6 +58,7 @@ namespace InfiniteSigns
             NetHooks.GetData += OnGetData;
             GameHooks.Initialize += OnInitialize;
             ServerHooks.Leave += OnLeave;
+            // Test comment to commit ;)
         }
 
         void OnGetData(GetDataEventArgs e)
