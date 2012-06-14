@@ -53,6 +53,7 @@ namespace InfiniteSigns
                 GameHooks.Initialize -= OnInitialize;
                 GameHooks.Update -= OnUpdate;
                 ServerHooks.Leave -= OnLeave;
+                WorldHooks.SaveWorld -= OnSaveWorld;
 
                 Database.Dispose();
             }
@@ -63,6 +64,7 @@ namespace InfiniteSigns
             GameHooks.Initialize += OnInitialize;
             GameHooks.Update += OnUpdate;
             ServerHooks.Leave += OnLeave;
+            WorldHooks.SaveWorld += OnSaveWorld;
         }
 
         void OnGetData(GetDataEventArgs e)
