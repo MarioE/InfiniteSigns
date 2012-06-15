@@ -33,7 +33,6 @@ namespace InfiniteSigns
             get { return "InfiniteSigns"; }
         }
         public bool[] SignNum = new bool[256];
-        public List<Sign> Signs = new List<Sign>();
         public override Version Version
         {
             get { return Assembly.GetExecutingAssembly().GetName().Version; }
@@ -51,9 +50,7 @@ namespace InfiniteSigns
             {
                 NetHooks.GetData -= OnGetData;
                 GameHooks.Initialize -= OnInitialize;
-                GameHooks.Update -= OnUpdate;
                 ServerHooks.Leave -= OnLeave;
-                WorldHooks.SaveWorld -= OnSaveWorld;
 
                 Database.Dispose();
             }
@@ -62,9 +59,7 @@ namespace InfiniteSigns
         {
             NetHooks.GetData += OnGetData;
             GameHooks.Initialize += OnInitialize;
-            GameHooks.Update += OnUpdate;
             ServerHooks.Leave += OnLeave;
-            WorldHooks.SaveWorld += OnSaveWorld;
         }
 
         void OnGetData(GetDataEventArgs e)
@@ -173,45 +168,19 @@ namespace InfiniteSigns
             Action[index] = SignAction.NONE;
             SignNum[index] = false;
         }
-        void OnSaveWorld(bool resetTime, HandledEventArgs e)
-        {
-            Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
-            foreach (Sign sign in Signs)
-            {
-                try
-                {
-                    Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, @3, @4)",
-                        sign.loc.X, sign.loc.Y, sign.account, sign.text, Main.worldID);
-                }
-                catch (MySqlException)
-                {
-                }
-            }
-            Signs.Clear();
-        }
-        void OnUpdate()
-        {
-            if (Main.worldID != 0)
-            {
-                using (QueryResult reader = Database.QueryReader("SELECT * FROM Signs WHERE WorldID = @0", Main.worldID))
-                {
-                    while (reader.Read())
-                    {
-                        Signs.Add(new Sign
-                        {
-                            account = reader.Get<string>("Account"),
-                            loc = new Point(reader.Get<int>("X"), reader.Get<int>("Y")),
-                            text = reader.Get<string>("Text")
-                        });
-                    }
-                }
-                GameHooks.Update -= OnUpdate;
-            }
-        }
 
         void GetSign(int X, int Y, int plr)
         {
-            Sign sign = Signs.Find(s => s.loc.X == X && s.loc.Y == Y);
+            Sign sign = null;
+            Console.WriteLine("{0},{1}", X, Y);
+            using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                }
+            }
             TSPlayer player = TShock.Players[plr];
 
             if (sign != null)
@@ -227,7 +196,8 @@ namespace InfiniteSigns
                             player.SendMessage("This sign is protected.", Color.Red);
                             break;
                         }
-                        sign.account = player.UserAccountName;
+                        Database.Query("UPDATE Signs SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                            player.UserAccountName, X, Y, Main.worldID);
                         player.SendMessage("This sign is now protected.");
                         break;
                     case SignAction.UNPROTECT:
@@ -241,10 +211,15 @@ namespace InfiniteSigns
                             player.SendMessage("This sign is not yours.", Color.Red);
                             break;
                         }
-                        sign.account = "";
+                        Database.Query("UPDATE Signs SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                            X, Y, Main.worldID);
                         player.SendMessage("This sign is now unprotected.");
                         break;
                     default:
+                        if (sign.text.Length > 0 && sign.text[sign.text.Length - 1] == '\0')
+                        {
+                            sign.text = sign.text.Substring(0, sign.text.Length - 1);
+                        }
                         byte[] utf8 = Encoding.UTF8.GetBytes(sign.text);
                         byte[] raw = new byte[15 + utf8.Length];
                         Buffer.BlockCopy(BitConverter.GetBytes(utf8.Length + 11), 0, raw, 0, 4);
@@ -253,8 +228,8 @@ namespace InfiniteSigns
                             raw[5] = 1;
                         }
                         raw[4] = 47;
-                        Buffer.BlockCopy(BitConverter.GetBytes(sign.loc.X), 0, raw, 7, 4);
-                        Buffer.BlockCopy(BitConverter.GetBytes(sign.loc.Y), 0, raw, 11, 4);
+                        Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw, 7, 4);
+                        Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
                         Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
                         player.SendRawData(raw);
                         SignNum[plr] = !SignNum[plr];
@@ -349,7 +324,15 @@ namespace InfiniteSigns
         }
         void ModSign(int X, int Y, int plr, string text)
         {
-            Sign sign = Signs.Find(s => s.loc.X == X && s.loc.Y == Y);
+            Sign sign = null;
+            using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    sign = new Sign { account = reader.Get<string>("Account") };
+                }
+            }
             TSPlayer player = TShock.Players[plr];
 
             if (sign != null)
@@ -360,45 +343,47 @@ namespace InfiniteSigns
                 }
                 else
                 {
-                    sign.text = text;
+                    Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                        text, X, Y, Main.worldID);
                 }
             }
         }
         void PlaceSign(int X, int Y, int plr)
         {
             TSPlayer player = TShock.Players[plr];
-
-            Signs.Add(new Sign
-            {
-                account = player.IsLoggedIn ? player.UserAccountName : "",
-                loc = new Point(X, Y)
-            });
+            Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
+                X, Y, player.IsLoggedIn ? player.UserAccountName : "", Main.worldID);
             Main.sign[999] = null;
         }
         bool TryKillSign(int X, int Y, int plr)
         {
-            Sign sign = Signs.Find(s => s.loc.X == X && s.loc.Y == Y);
+            Sign sign = null;
+            using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    sign = new Sign { account = reader.Get<string>("Account") };
+                }
+            }
             if (sign != null && sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
             {
                 return false;
             }
-            Signs.Remove(sign);
+            Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
             return true;
         }
 
         void ConvertSigns(CommandArgs e)
         {
-            Signs.Clear();
+            Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
             int converted = 0;
             foreach (Terraria.Sign s in Main.sign)
             {
                 if (s != null)
                 {
-                    Signs.Add(new Sign
-                    {
-                        loc = new Point(s.x, s.y),
-                        text = s.text
-                    });
+                    Database.Query("INSERT INTO Signs (X, Y, Text, WorldID) VALUES (@0, @1, @2, @3)",
+                        s.x, s.y, s.text, Main.worldID);
                     converted++;
                 }
             }

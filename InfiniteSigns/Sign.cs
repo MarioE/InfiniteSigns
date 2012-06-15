@@ -9,7 +9,6 @@ namespace InfiniteSigns
     public class Sign
     {
         public string account = "";
-        public Point loc;
         public string text = "";
 
         public static Point GetSign(int X, int Y)
