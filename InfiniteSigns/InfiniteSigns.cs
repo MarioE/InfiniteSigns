@@ -172,7 +172,6 @@ namespace InfiniteSigns
         void GetSign(int X, int Y, int plr)
         {
             Sign sign = null;
-            Console.WriteLine("{0},{1}", X, Y);
             using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
                 X, Y, Main.worldID))
             {
