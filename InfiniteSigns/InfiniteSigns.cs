@@ -41,7 +41,8 @@ namespace InfiniteSigns
         public InfiniteSigns(Main game)
             : base(game)
         {
-            Order = -1;
+            Order = -2; 
+            //test
         }
 
         protected override void Dispose(bool disposing)
