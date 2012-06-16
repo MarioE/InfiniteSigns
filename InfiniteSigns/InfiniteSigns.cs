@@ -72,11 +72,7 @@ namespace InfiniteSigns
                         {
                             int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 2);
                             int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 6);
-                            string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 10);
-                            if (text.Length != 0 && text[text.Length - 1] == '\0')
-                            {
-                                text = text.Substring(0, text.Length - 1);
-                            }
+                            string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 11);
                             ModSign(X, Y, e.Msg.whoAmI, text);
                             e.Handled = true;
                         }
