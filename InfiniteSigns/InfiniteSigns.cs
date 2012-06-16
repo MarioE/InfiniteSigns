@@ -19,11 +19,18 @@ namespace InfiniteSigns
     public class InfiniteSigns : TerrariaPlugin
     {
         public SignAction[] Action = new SignAction[256];
+        public bool[] SignNum = new bool[256];
+        public IDbConnection Database;
+        public delegate void SignReadHandler(SignEventArgs args);
+        public delegate void SignEditHandler(SignEventArgs args);
+        public delegate void SignKillHandler(SignEventArgs args);
+        public static event SignReadHandler SignRead;
+        public static event SignEditHandler SignEdit;
+        public static event SignKillHandler SignKill;
         public override string Author
         {
             get { return "MarioE"; }
         }
-        public IDbConnection Database;
         public override string Description
         {
             get { return "Allows for infinite signs, and supports all sign control commands."; }
@@ -32,19 +39,15 @@ namespace InfiniteSigns
         {
             get { return "InfiniteSigns"; }
         }
-        public bool[] SignNum = new bool[256];
         public override Version Version
         {
             get { return Assembly.GetExecutingAssembly().GetName().Version; }
         }
-
         public InfiniteSigns(Main game)
             : base(game)
         {
-            Order = -2; 
-            //test
+            Order = -1;
         }
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -62,7 +65,6 @@ namespace InfiniteSigns
             GameHooks.Initialize += OnInitialize;
             ServerHooks.Leave += OnLeave;
         }
-
         void OnGetData(GetDataEventArgs e)
         {
             if (!e.Handled)
@@ -165,7 +167,6 @@ namespace InfiniteSigns
             Action[index] = SignAction.NONE;
             SignNum[index] = false;
         }
-
         void GetSign(int X, int Y, int plr)
         {
             Sign sign = null;
@@ -229,6 +230,11 @@ namespace InfiniteSigns
                         Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
                         player.SendRawData(raw);
                         SignNum[plr] = !SignNum[plr];
+                        if (SignRead != null)
+                        {
+                            SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                            SignRead(signargs);
+                        }
                         break;
                 }
                 Action[plr] = SignAction.NONE;
@@ -341,6 +347,11 @@ namespace InfiniteSigns
                 {
                     Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
                         text, X, Y, Main.worldID);
+                    if (SignEdit != null)
+                    {
+                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                        SignEdit(signargs);
+                    }
                 }
             }
         }
@@ -354,22 +365,30 @@ namespace InfiniteSigns
         bool TryKillSign(int X, int Y, int plr)
         {
             Sign sign = null;
-            using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+            using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
                 X, Y, Main.worldID))
             {
                 if (reader.Read())
                 {
-                    sign = new Sign { account = reader.Get<string>("Account") };
+                    sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
                 }
             }
-            if (sign != null && sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
+            if (sign != null)
             {
-                return false;
+                if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
+                    return false;
+                else
+                {
+                    if (SignKill != null)
+                    {
+                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                        SignKill(signargs);
+                    }
+                }                    
             }
             Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
             return true;
         }
-
         void ConvertSigns(CommandArgs e)
         {
             Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
@@ -405,5 +424,19 @@ namespace InfiniteSigns
             Action[e.Player.Index] = SignAction.UNPROTECT;
             e.Player.SendMessage("Read a sign to unprotect it.");
         }
+    }
+    public class SignEventArgs : EventArgs
+    {
+        public SignEventArgs(int x, int y, string text, string account)
+        {
+            this.X = x;
+            this.Y = y;
+            this.text = text;
+            this.Account = account;
+        }
+        public int X;
+        public int Y;
+        public string text;
+        public string Account;
     }
 }
