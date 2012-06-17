@@ -19,14 +19,11 @@ namespace InfiniteSigns
     public class InfiniteSigns : TerrariaPlugin
     {
         public SignAction[] Action = new SignAction[256];
-        public bool[] SignNum = new bool[256];
         public IDbConnection Database;
-        public delegate void SignReadHandler(SignEventArgs args);
-        public delegate void SignEditHandler(SignEventArgs args);
-        public delegate void SignKillHandler(SignEventArgs args);
-        public static event SignReadHandler SignRead;
-        public static event SignEditHandler SignEdit;
-        public static event SignKillHandler SignKill;
+        public bool[] SignNum = new bool[256];
+        public static event Action<SignEventArgs> SignEdit;
+        public static event Action<SignEventArgs> SignKill;
+        public static event Action<SignEventArgs> SignRead;
         public override string Author
         {
             get { return "MarioE"; }
@@ -232,7 +229,7 @@ namespace InfiniteSigns
                         SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
                         if (SignRead != null)                        
                             SignRead(signargs);                        
-                        if (!signargs.handled)
+                        if (!signargs.Handled)
                             player.SendRawData(raw);
                         break;
                 }
@@ -347,7 +344,7 @@ namespace InfiniteSigns
                     SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
                     if (SignEdit != null)                                            
                         SignEdit(signargs);
-                    if (signargs.handled)
+                    if (signargs.Handled)
                         player.SendMessage("Another plugin is preventing the sign to be edited.", Color.Red);
                     else
                         Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
@@ -382,7 +379,7 @@ namespace InfiniteSigns
                     {
                         SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
                         SignKill(signargs);
-                        if (signargs.handled)
+                        if (signargs.Handled)
                             return false;
                     }
                 }                    
@@ -426,7 +423,7 @@ namespace InfiniteSigns
             e.Player.SendMessage("Read a sign to unprotect it.");
         }
     }
-    public class SignEventArgs : EventArgs
+    public class SignEventArgs : HandledEventArgs
     {
         public SignEventArgs(int x, int y, string text, string account)
         {
@@ -439,6 +436,5 @@ namespace InfiniteSigns
         public int Y;
         public string text;
         public string Account;
-        public bool handled = false;
     }
 }
