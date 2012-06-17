@@ -228,13 +228,12 @@ namespace InfiniteSigns
                         Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw, 7, 4);
                         Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
                         Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
-                        player.SendRawData(raw);
-                        SignNum[plr] = !SignNum[plr];
-                        if (SignRead != null)
-                        {
-                            SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-                            SignRead(signargs);
-                        }
+                        SignNum[plr] = !SignNum[plr];                        
+                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                        if (SignRead != null)                        
+                            SignRead(signargs);                        
+                        if (!signargs.handled)
+                            player.SendRawData(raw);
                         break;
                 }
                 Action[plr] = SignAction.NONE;
@@ -345,13 +344,13 @@ namespace InfiniteSigns
                 }
                 else
                 {
-                    Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                        text, X, Y, Main.worldID);
-                    if (SignEdit != null)
-                    {
-                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                    SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+                    if (SignEdit != null)                                            
                         SignEdit(signargs);
-                    }
+                    if (signargs.handled)
+                        player.SendMessage("Another plugin is preventing the sign to be edited.", Color.Red);
+                    else
+                        Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
                 }
             }
         }
@@ -378,11 +377,13 @@ namespace InfiniteSigns
                 if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
                     return false;
                 else
-                {
+                {                    
                     if (SignKill != null)
                     {
                         SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
                         SignKill(signargs);
+                        if (signargs.handled)
+                            return false;
                     }
                 }                    
             }
@@ -438,5 +439,6 @@ namespace InfiniteSigns
         public int Y;
         public string text;
         public string Account;
+        public bool handled = false;
     }
 }
