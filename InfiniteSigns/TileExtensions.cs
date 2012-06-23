@@ -18,7 +18,7 @@ namespace InfiniteSigns
         }
         public static bool Valid(this TileCollection t, int X, int Y)
         {
-            return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null;
+            return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null && Main.tile[X, Y].type != 127;
         }
     }
 }

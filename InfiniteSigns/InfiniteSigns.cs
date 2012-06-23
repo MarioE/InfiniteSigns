@@ -24,6 +24,7 @@ namespace InfiniteSigns
         public static event Action<SignEventArgs> SignEdit;
         public static event Action<SignEventArgs> SignKill;
         public static event Action<SignEventArgs> SignRead;
+
         public override string Author
         {
             get { return "MarioE"; }
@@ -45,6 +46,7 @@ namespace InfiniteSigns
         {
             Order = -1;
         }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -62,6 +64,7 @@ namespace InfiniteSigns
             GameHooks.Initialize += OnInitialize;
             ServerHooks.Leave += OnLeave;
         }
+
         void OnGetData(GetDataEventArgs e)
         {
             if (!e.Handled)
@@ -164,6 +167,7 @@ namespace InfiniteSigns
             Action[index] = SignAction.NONE;
             SignNum[index] = false;
         }
+
         void GetSign(int X, int Y, int plr)
         {
             Sign sign = null;
@@ -387,6 +391,7 @@ namespace InfiniteSigns
             Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
             return true;
         }
+
         void ConvertSigns(CommandArgs e)
         {
             Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
