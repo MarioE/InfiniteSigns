@@ -118,7 +118,6 @@ namespace InfiniteSigns
                                         X--;
                                     }
                                     PlaceSign(X, Y, e.Msg.whoAmI);
-                                    e.Handled = true;
                                 }
                             }
                         }
