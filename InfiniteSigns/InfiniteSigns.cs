@@ -109,6 +109,7 @@ namespace InfiniteSigns
                                 if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
                                 {
                                     WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    TSPlayer.All.SendData(PacketTypes.Tile, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
                                     if (Main.tile[X, Y].frameY != 0)
                                     {
                                         Y--;
@@ -118,6 +119,7 @@ namespace InfiniteSigns
                                         X--;
                                     }
                                     PlaceSign(X, Y, e.Msg.whoAmI);
+                                    e.Handled = true;
                                 }
                             }
                         }
