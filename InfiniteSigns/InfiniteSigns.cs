@@ -100,8 +100,7 @@ namespace InfiniteSigns
                             {
                                 if (Sign.Nearby(X, Y))
                                 {
-                                    KillSign(X, Y, e.Msg.whoAmI);
-                                    e.Handled = true;
+                                    e.Handled = KillSign(X, Y, e.Msg.whoAmI);
                                 }
                             }
                             else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
@@ -241,7 +240,7 @@ namespace InfiniteSigns
                 Action[plr] = SignAction.NONE;
             }
         }
-        void KillSign(int X, int Y, int plr)
+        bool KillSign(int X, int Y, int plr)
         {
             TSPlayer player = TShock.Players[plr];
 
@@ -255,11 +254,13 @@ namespace InfiniteSigns
                 {
                     WorldGen.KillTile(X, Y);
                     TSPlayer.All.SendTileSquare(X, Y, 3);
+                    return true;
                 }
                 else
                 {
                     player.SendMessage("This sign is protected.", Color.Red);
                     player.SendTileSquare(X, Y, 5);
+                    return true;
                 }
             }
             else
@@ -318,11 +319,7 @@ namespace InfiniteSigns
                         killTile = false;
                     }
                 }
-                if (killTile)
-                {
-                    WorldGen.KillTile(X, Y);
-                    TSPlayer.All.SendTileSquare(X, Y, 1);
-                }
+                return !killTile;
             }
         }
         void ModSign(int X, int Y, int plr, string text)
