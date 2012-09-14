@@ -368,16 +368,15 @@ namespace InfiniteSigns
 
 			if (sign != null)
 			{
-				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("editallsigns"))
+				SignEventArgs signargs = new SignEventArgs(X, Y, text, plr, sign.id, sign.account);
+				signargs.Handled = false;
+				if (SignEdit != null)
+					SignEdit(signargs);
+				if (!signargs.Handled)
 				{
-					player.SendMessage("This sign is protected.", Color.Red);
-				}
-				else
-				{
-					SignEventArgs signargs = new SignEventArgs(X, Y, text, plr, sign.id, sign.account);
-					if (SignEdit != null)
-						SignEdit(signargs);
-					if (!signargs.Handled)
+					if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("editallsigns"))
+						player.SendMessage("This sign is protected.", Color.Red);
+					else
 						Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
 				}
 			}
@@ -403,20 +402,19 @@ namespace InfiniteSigns
 			}
 			if (sign != null)
 			{
-				if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
-					return false;
+				SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, plr, sign.id, sign.account);
+				signargs.Handled = false;
+				if (SignKill != null)
+					SignKill(signargs);
+				if (!signargs.Handled)
+				{
+					if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
+						return false;
+				}
 				else
 				{
-					if (SignKill != null)
-					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, plr, sign.id, sign.account);
-						SignKill(signargs);
-						if (signargs.Handled)
-						{
-							handled = true;
-							return false;
-						}
-					}
+					handled = true;
+					return false;
 				}
 			}
 			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
