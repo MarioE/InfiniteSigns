@@ -10,6 +10,7 @@ namespace InfiniteSigns
 	{
 		public string account = "";
 		public string text = "";
+		public int id = -1;
 
 		public static Point GetSign(int X, int Y)
 		{
