@@ -22,6 +22,7 @@ namespace InfiniteSigns
 		public IDbConnection Database;
 		public bool[] SignNum = new bool[256];
 		public static event Action<SignEventArgs> SignEdit;
+		public static event Action<SignEventArgs> SignHit;
 		public static event Action<SignEventArgs> SignKill;
 		public static event Action<SignEventArgs> SignRead;
 
@@ -121,6 +122,13 @@ namespace InfiniteSigns
 									e.Handled = true;
 								}
 							}
+							else
+							{
+								if (Sign.Nearby(X, Y))
+								{
+									e.Handled = HitSign(X, Y, e.Msg.whoAmI);
+								}
+							}
 						}
 						break;
 				}
@@ -171,12 +179,12 @@ namespace InfiniteSigns
 		void GetSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
-					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text"), id = reader.Get<int>("rowid") };
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
@@ -230,7 +238,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						SignNum[plr] = !SignNum[plr];
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, plr, sign.id, sign.account);
 						if (SignRead != null)
 							SignRead(signargs);
 						if (!signargs.Handled)
@@ -239,6 +247,25 @@ namespace InfiniteSigns
 				}
 				Action[plr] = SignAction.NONE;
 			}
+		}
+		bool HitSign(int X, int Y, int plr)
+		{
+			Point Location = Sign.GetSign(X, Y);
+			X = Location.X; Y = Location.Y;
+			Sign sign = null;
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+				X, Y, Main.worldID))
+			{
+				if (reader.Read())
+				{
+					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text"), id = reader.Get<int>("rowid") };
+				}
+			}
+			if (sign == null) return false;
+			SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, plr, sign.id, sign.account);
+			if (SignHit != null)
+				SignHit(signargs);
+			return signargs.Handled;
 		}
 		bool KillSign(int X, int Y, int plr)
 		{
@@ -250,7 +277,8 @@ namespace InfiniteSigns
 			if (Main.tile[X, Y].IsSign())
 			{
 				positions.Add(Sign.GetSign(X, Y));
-				if (TryKillSign(positions[0].X, positions[0].Y, plr))
+				bool handled = false;
+				if (TryKillSign(positions[0].X, positions[0].Y, plr, out handled))
 				{
 					WorldGen.KillTile(X, Y);
 					TSPlayer.All.SendTileSquare(X, Y, 3);
@@ -258,7 +286,8 @@ namespace InfiniteSigns
 				}
 				else
 				{
-					player.SendMessage("This sign is protected.", Color.Red);
+					if (!handled)
+						player.SendMessage("This sign is protected.", Color.Red);
 					player.SendTileSquare(X, Y, 5);
 					return true;
 				}
@@ -307,14 +336,16 @@ namespace InfiniteSigns
 					{
 						continue;
 					}
-					if (TryKillSign(p.X, p.Y, plr))
+					bool handled = false;
+					if (TryKillSign(p.X, p.Y, plr, out handled))
 					{
 						WorldGen.KillTile(p.X, p.Y);
 						TSPlayer.All.SendTileSquare(p.X, p.Y, 3);
 					}
 					else
 					{
-						player.SendMessage("This sign is protected.", Color.Red);
+						if (!handled)
+							player.SendMessage("This sign is protected.", Color.Red);
 						player.SendTileSquare(X, Y, 5);
 						killTile = false;
 					}
@@ -325,29 +356,26 @@ namespace InfiniteSigns
 		void ModSign(int X, int Y, int plr, string text)
 		{
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
-					sign = new Sign { account = reader.Get<string>("Account") };
+					sign = new Sign { account = reader.Get<string>("Account"), id = reader.Get<int>("rowid") };
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
 
 			if (sign != null)
 			{
-				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("editallsigns"))
+				SignEventArgs signargs = new SignEventArgs(X, Y, text, plr, sign.id, sign.account);
+				signargs.Handled = false;
+				if (SignEdit != null)
+					SignEdit(signargs);
+				if (!signargs.Handled)
 				{
-					player.SendMessage("This sign is protected.", Color.Red);
-				}
-				else
-				{
-					SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-					if (SignEdit != null)
-						SignEdit(signargs);
-					if (signargs.Handled)
-						player.SendMessage("Another plugin is preventing the sign to be edited.", Color.Red);
+					if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("editallsigns"))
+						player.SendMessage("This sign is protected.", Color.Red);
 					else
 						Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
 				}
@@ -360,30 +388,33 @@ namespace InfiniteSigns
 				X, Y, player.IsLoggedIn ? player.UserAccountName : "", Main.worldID);
 			Main.sign[999] = null;
 		}
-		bool TryKillSign(int X, int Y, int plr)
+		bool TryKillSign(int X, int Y, int plr, out bool handled)
 		{
+			handled = false;
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
-					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text"), id = reader.Get<int>("rowid") };
 				}
 			}
 			if (sign != null)
 			{
-				if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
-					return false;
+				SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, plr, sign.id, sign.account);
+				signargs.Handled = false;
+				if (SignKill != null)
+					SignKill(signargs);
+				if (!signargs.Handled)
+				{
+					if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
+						return false;
+				}
 				else
 				{
-					if (SignKill != null)
-					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-						SignKill(signargs);
-						if (signargs.Handled)
-							return false;
-					}
+					handled = true;
+					return false;
 				}
 			}
 			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
@@ -428,16 +459,20 @@ namespace InfiniteSigns
 	}
 	public class SignEventArgs : HandledEventArgs
 	{
-		public SignEventArgs(int x, int y, string text, string account)
+		public SignEventArgs(int x, int y, string text, int who, int id, string account)
 		{
 			this.X = x;
 			this.Y = y;
 			this.text = text;
+			this.who = who;
+			this.id = id;
 			this.Account = account;
 		}
 		public int X;
 		public int Y;
 		public string text;
+		public int who;
+		public int id;
 		public string Account;
 	}
 }
