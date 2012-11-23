@@ -406,27 +406,27 @@ namespace InfiniteSigns
 					converted++;
 				}
 			}
-			e.Player.SendMessage("Converted " + converted + " signs.");
+			e.Player.SendMessage("Converted " + converted + " signs.", Color.Green);
 		}
 		void Deselect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.NONE;
-			e.Player.SendMessage("Stopped selecting a sign.");
+			e.Player.SendMessage("Stopped selecting a sign.", Color.Yellow);
 		}
 		void Info(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.INFO;
-			e.Player.SendMessage("Read a sign to get its info.");
+			e.Player.SendMessage("Read a sign to get its info.", Color.Green);
 		}
 		void Protect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.PROTECT;
-			e.Player.SendMessage("Read a sign to protect it.");
+			e.Player.SendMessage("Read a sign to protect it.", Color.Green);
 		}
 		void Unprotect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.UNPROTECT;
-			e.Player.SendMessage("Read a sign to unprotect it.");
+			e.Player.SendMessage("Read a sign to unprotect it.", Color.Green);
 		}
 	}
 	public class SignEventArgs : HandledEventArgs
