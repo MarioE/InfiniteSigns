@@ -128,11 +128,11 @@ namespace InfiniteSigns
 		}
 		void OnInitialize()
 		{
-			Commands.ChatCommands.Add(new Command("maintenance", ConvertSigns, "convsigns"));
-			Commands.ChatCommands.Add(new Command("protectsign", Deselect, "scset"));
-			Commands.ChatCommands.Add(new Command("showsigninfo", Info, "sinfo"));
-			Commands.ChatCommands.Add(new Command("protectsign", Protect, "sset"));
-			Commands.ChatCommands.Add(new Command("protectsign", Unprotect, "sunset"));
+			Commands.ChatCommands.Add(new Command("infsigns.admin.convert", ConvertSigns, "convsigns"));
+			Commands.ChatCommands.Add(new Command("infsigns.sign.deselect", Deselect, "scset"));
+			Commands.ChatCommands.Add(new Command("infsigns.admin.info", Info, "sinfo"));
+			Commands.ChatCommands.Add(new Command("infsigns.sign.protect", Protect, "sset"));
+			Commands.ChatCommands.Add(new Command("infsigns.sign.unprotect", Unprotect, "sunset"));
 
 			switch (TShock.Config.StorageType.ToLower())
 			{
@@ -204,7 +204,7 @@ namespace InfiniteSigns
 							player.SendMessage("This sign is not protected.", Color.Red);
 							break;
 						}
-						if (sign.account != player.UserAccountName && !player.Group.HasPermission("removesignprotection"))
+						if (sign.account != player.UserAccountName && !player.Group.HasPermission("infsigns.admin.editall"))
 						{
 							player.SendMessage("This sign is not yours.", Color.Red);
 							break;
@@ -337,7 +337,7 @@ namespace InfiniteSigns
 
 			if (sign != null)
 			{
-				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("editallsigns"))
+				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("infsigns.admin.editall"))
 				{
 					player.SendMessage("This sign is protected.", Color.Red);
 				}
@@ -347,7 +347,7 @@ namespace InfiniteSigns
 					if (SignEdit != null)
 						SignEdit(signargs);
 					if (signargs.Handled)
-						player.SendMessage("Another plugin is preventing the sign to be edited.", Color.Red);
+						player.SendMessage("Another plugin is preventing the sign from being edited.", Color.Red);
 					else
 						Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
 				}
@@ -373,8 +373,11 @@ namespace InfiniteSigns
 			}
 			if (sign != null)
 			{
-				if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "")
+				if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "" &&
+					TShock.Players[plr].Group.HasPermission("infsigns.admin.editall"))
+				{
 					return false;
+				}
 				else
 				{
 					if (SignKill != null)
