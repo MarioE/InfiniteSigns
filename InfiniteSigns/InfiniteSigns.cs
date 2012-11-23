@@ -374,7 +374,7 @@ namespace InfiniteSigns
 			if (sign != null)
 			{
 				if (sign.account != TShock.Players[plr].UserAccountName && sign.account != "" &&
-					TShock.Players[plr].Group.HasPermission("infsigns.admin.editall"))
+					!TShock.Players[plr].Group.HasPermission("infsigns.admin.editall"))
 				{
 					return false;
 				}
