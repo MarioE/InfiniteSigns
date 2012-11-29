@@ -18,6 +18,7 @@ namespace InfiniteSigns
 	[APIVersion(1, 12)]
 	public class InfiniteSigns : TerrariaPlugin
 	{
+		public static InfiniteSigns LatestInstance;
 		public SignAction[] Action = new SignAction[256];
 		public IDbConnection Database;
 		public bool[] SignNum = new bool[256];
@@ -44,6 +45,7 @@ namespace InfiniteSigns
 		public InfiniteSigns(Main game)
 			: base(game)
 		{
+			LatestInstance = this;
 			Order = -1;
 		}
 
@@ -240,7 +242,28 @@ namespace InfiniteSigns
 				Action[plr] = SignAction.NONE;
 			}
 		}
-		bool KillSign(int X, int Y, int plr)
+		public string GetSignText(int X, int Y)
+		{
+			string text = null;
+			using (QueryResult reader = Database.QueryReader("SELECT Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+				X, Y, Main.worldID))
+			{
+				if (reader.Read())
+				{
+					text = reader.Get<string>("Text");
+				}
+			}
+
+			if (text != null) 
+			{
+				if (text.Length > 0 && text[text.Length - 1] == '\0')
+			  {
+				  text = text.Substring(0, text.Length - 1);
+				}
+			}
+			return text;
+		}
+		public bool KillSign(int X, int Y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
 
@@ -322,7 +345,7 @@ namespace InfiniteSigns
 				return !killTile;
 			}
 		}
-		void ModSign(int X, int Y, int plr, string text)
+		public void ModSign(int X, int Y, int plr, string text)
 		{
 			Sign sign = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
@@ -353,14 +376,14 @@ namespace InfiniteSigns
 				}
 			}
 		}
-		void PlaceSign(int X, int Y, int plr)
+		public void PlaceSign(int X, int Y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
 			Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
 				X, Y, player.IsLoggedIn ? player.UserAccountName : "", Main.worldID);
 			Main.sign[999] = null;
 		}
-		bool TryKillSign(int X, int Y, int plr)
+		public bool TryKillSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
@@ -392,7 +415,6 @@ namespace InfiniteSigns
 			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
 			return true;
 		}
-
 		void ConvertSigns(CommandArgs e)
 		{
 			Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
