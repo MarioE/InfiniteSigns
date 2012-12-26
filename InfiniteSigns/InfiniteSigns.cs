@@ -357,7 +357,7 @@ namespace InfiniteSigns
 		{
 			TSPlayer player = TShock.Players[plr];
 			Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
-				X, Y, player.IsLoggedIn ? player.UserAccountName : "", Main.worldID);
+				X, Y, (player.IsLoggedIn && player.Group.HasPermission("infsigns.sign.protect")) ? player.UserAccountName : "", Main.worldID);
 			Main.sign[999] = null;
 		}
 		bool TryKillSign(int X, int Y, int plr)
