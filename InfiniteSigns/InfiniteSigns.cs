@@ -110,17 +110,19 @@ namespace InfiniteSigns
                                 {
                                     var signPos = Sign.GetSign(X, Y);
                                     Sign sign = null;
-                                    using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                                    int signID = 0;
+                                    using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
                                         signPos.X, signPos.Y, Main.worldID))
                                     {
                                         if (reader.Read())
                                         {
                                             sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                                            signID = reader.Get<int>("rowid");
                                         }
                                     }
                                     if (sign != null)
                                     {
-                                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, e.Msg.whoAmI);
+                                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, e.Msg.whoAmI, signID);
                                         SignHit(signargs);
                                     }
                                 }
@@ -193,12 +195,14 @@ namespace InfiniteSigns
 		void GetSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+            int signID = 0;
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                    signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
@@ -252,7 +256,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						SignNum[plr] = !SignNum[plr];
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr, signID);
 						if (SignRead != null)
 							SignRead(signargs);
 						if (!signargs.Handled)
@@ -347,32 +351,29 @@ namespace InfiniteSigns
 		void ModSign(int X, int Y, int plr, string text)
 		{
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+            int signID = 0;
+			using (QueryResult reader = Database.QueryReader("SELECT Account, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account") };
+                    signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
 
 			if (sign != null)
 			{
-				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("infsigns.admin.editall"))
-				{
-					player.SendMessage("This sign is protected.", Color.Red);
-				}
-				else
-				{
-                    SignEventArgs signargs = new SignEventArgs(X, Y, text, sign.account, plr);
-					if (SignEdit != null)
-						SignEdit(signargs);
-					if (signargs.Handled)
-						player.SendMessage("Another plugin is preventing the sign from being edited.", Color.Red);
-					else
-						Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
-				}
+                SignEventArgs signargs = new SignEventArgs(X, Y, text, sign.account, plr, signID);
+                if (SignEdit != null)
+                    SignEdit(signargs);
+                if (signargs.Handled)
+                    player.SendMessage("Another plugin is preventing the sign from being edited.", Color.Red);
+                else if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("infsigns.admin.editall"))
+                    player.SendMessage("This sign is protected.", Color.Red);
+                else
+                    Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
 			}
 		}
 		void PlaceSign(int X, int Y, int plr)
@@ -385,12 +386,14 @@ namespace InfiniteSigns
 		bool TryKillSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+            int signID = 0;
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                    signID = reader.Get<int>("rowid");
 				}
 			}
 			if (sign != null)
@@ -404,7 +407,7 @@ namespace InfiniteSigns
 				{
 					if (SignKill != null)
 					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr, signID);
 						SignKill(signargs);
 						if (signargs.Handled)
 							return false;
@@ -453,18 +456,20 @@ namespace InfiniteSigns
 	}
 	public class SignEventArgs : HandledEventArgs
 	{
-		public SignEventArgs(int x, int y, string text, string account, int who)
+		public SignEventArgs(int x, int y, string text, string account, int who, int signID)
 		{
 			this.X = x;
 			this.Y = y;
 			this.text = text;
 			this.Account = account;
             this.Who = who;
+            this.SignID = signID;
 		}
 		public int X;
 		public int Y;
 		public string text;
 		public string Account;
         public int Who;
+        public int SignID;
 	}
 }
