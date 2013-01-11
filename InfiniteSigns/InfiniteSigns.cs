@@ -111,13 +111,13 @@ namespace InfiniteSigns
                                     var signPos = Sign.GetSign(X, Y);
                                     Sign sign = null;
                                     int signID = 0;
-                                    using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                                    using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
                                         signPos.X, signPos.Y, Main.worldID))
                                     {
                                         if (reader.Read())
                                         {
                                             sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                                            signID = reader.Get<int>("rowid");
+                                           // signID = reader.Get<int>("rowid");
                                         }
                                     }
                                     if (sign != null)
@@ -196,13 +196,13 @@ namespace InfiniteSigns
 		{
 			Sign sign = null;
             int signID = 0;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                    signID = reader.Get<int>("rowid");
+                   // signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
@@ -352,13 +352,13 @@ namespace InfiniteSigns
 		{
 			Sign sign = null;
             int signID = 0;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account") };
-                    signID = reader.Get<int>("rowid");
+                    //signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
@@ -387,13 +387,13 @@ namespace InfiniteSigns
 		{
 			Sign sign = null;
             int signID = 0;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Text, rowid FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                    signID = reader.Get<int>("rowid");
+                  //  signID = reader.Get<int>("rowid");
 				}
 			}
 			if (sign != null)
