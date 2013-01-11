@@ -21,8 +21,9 @@ namespace InfiniteSigns
 		public SignAction[] Action = new SignAction[256];
 		public IDbConnection Database;
 		public bool[] SignNum = new bool[256];
-		public static event Action<SignEventArgs> SignEdit;
-		public static event Action<SignEventArgs> SignKill;
+        public static event Action<SignEventArgs> SignEdit;
+        public static event Action<SignEventArgs> SignKill;
+        public static event Action<SignEventArgs> SignHit;
 		public static event Action<SignEventArgs> SignRead;
 
 		public override string Author
@@ -103,24 +104,45 @@ namespace InfiniteSigns
 									e.Handled = KillSign(X, Y, e.Msg.whoAmI);
 								}
 							}
-							else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
-							{
-								if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
-								{
-									WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
-									NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
-									if (Main.tile[X, Y].frameY != 0)
-									{
-										Y--;
-									}
-									if (Main.tile[X, Y].frameX % 36 != 0)
-									{
-										X--;
-									}
-									PlaceSign(X, Y, e.Msg.whoAmI);
-									e.Handled = true;
-								}
-							}
+                            else if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 1 && (Main.tile[X,Y].type == 55 || Main.tile[X,Y].type == 85)) // sign hit
+                            {
+                                if (SignHit != null)
+                                {
+                                    var signPos = Sign.GetSign(X, Y);
+                                    Sign sign = null;
+                                    using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                                        signPos.X, signPos.Y, Main.worldID))
+                                    {
+                                        if (reader.Read())
+                                        {
+                                            sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                                        }
+                                    }
+                                    if (sign != null)
+                                    {
+                                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, e.Msg.whoAmI);
+                                        SignHit(signargs);
+                                    }
+                                }
+                            }
+                            else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
+                            {
+                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
+                                {
+                                    WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    if (Main.tile[X, Y].frameY != 0)
+                                    {
+                                        Y--;
+                                    }
+                                    if (Main.tile[X, Y].frameX % 36 != 0)
+                                    {
+                                        X--;
+                                    }
+                                    PlaceSign(X, Y, e.Msg.whoAmI);
+                                    e.Handled = true;
+                                }
+                            }
 						}
 						break;
 				}
@@ -230,7 +252,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						SignNum[plr] = !SignNum[plr];
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
 						if (SignRead != null)
 							SignRead(signargs);
 						if (!signargs.Handled)
@@ -343,7 +365,7 @@ namespace InfiniteSigns
 				}
 				else
 				{
-					SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+					SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
 					if (SignEdit != null)
 						SignEdit(signargs);
 					if (signargs.Handled)
@@ -382,7 +404,7 @@ namespace InfiniteSigns
 				{
 					if (SignKill != null)
 					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
 						SignKill(signargs);
 						if (signargs.Handled)
 							return false;
@@ -431,16 +453,18 @@ namespace InfiniteSigns
 	}
 	public class SignEventArgs : HandledEventArgs
 	{
-		public SignEventArgs(int x, int y, string text, string account)
+		public SignEventArgs(int x, int y, string text, string account, int who)
 		{
 			this.X = x;
 			this.Y = y;
 			this.text = text;
 			this.Account = account;
+            this.Who = who;
 		}
 		public int X;
 		public int Y;
 		public string text;
 		public string Account;
+        public int Who;
 	}
 }

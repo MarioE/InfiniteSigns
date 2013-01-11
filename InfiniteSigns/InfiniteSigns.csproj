@@ -32,15 +32,15 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Mono.Data.Sqlite">
-      <HintPath>..\..\TShockLib\Mono.Data.Sqlite.dll</HintPath>
+      <HintPath>..\..\..\tShock References\4.0\serverplugins\Mono.Data.Sqlite.dll</HintPath>
     </Reference>
     <Reference Include="MySql.Data, Version=6.4.4.0, Culture=neutral, PublicKeyToken=c5687fc88969c44d, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\TShockLib\MySql.Data.dll</HintPath>
+      <HintPath>..\..\..\tShock References\4.0\serverplugins\MySql.Data.dll</HintPath>
     </Reference>
     <Reference Include="MySql.Web, Version=6.4.4.0, Culture=neutral, PublicKeyToken=c5687fc88969c44d, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\TShockLib\MySql.Web.dll</HintPath>
+      <HintPath>..\..\..\tShock References\4.0\serverplugins\MySql.Web.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -50,10 +50,10 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="TerrariaServer">
-      <HintPath>..\..\TShockLib\TerrariaServer.exe</HintPath>
+      <HintPath>..\..\..\tShock References\4.0\TerrariaServer.exe</HintPath>
     </Reference>
     <Reference Include="TShockAPI">
-      <HintPath>..\..\TShockLib\TShockAPI.dll</HintPath>
+      <HintPath>..\..\..\tShock References\4.0\serverplugins\TShockAPI.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -63,6 +63,9 @@
     <Compile Include="TileExtensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>xcopy "$(ProjectDir)$(OutDir)$(TargetFileName)" "D:\Program Files\Steam\steamapps\common\terraria\ServerPlugins\" /Y</PostBuildEvent>
+  </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
