@@ -365,7 +365,7 @@ namespace InfiniteSigns
 				}
 				else
 				{
-					SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
+                    SignEventArgs signargs = new SignEventArgs(X, Y, text, sign.account, plr);
 					if (SignEdit != null)
 						SignEdit(signargs);
 					if (signargs.Handled)
