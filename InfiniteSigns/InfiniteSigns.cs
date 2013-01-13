@@ -110,19 +110,17 @@ namespace InfiniteSigns
                                 {
                                     var signPos = Sign.GetSign(X, Y);
                                     Sign sign = null;
-                                    int signID = 0;
                                     using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
                                         signPos.X, signPos.Y, Main.worldID))
                                     {
                                         if (reader.Read())
                                         {
                                             sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                                           // signID = reader.Get<int>("rowid");
                                         }
                                     }
                                     if (sign != null)
                                     {
-                                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, e.Msg.whoAmI, signID);
+                                        SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, e.Msg.whoAmI);
                                         SignHit(signargs);
                                     }
                                 }
@@ -195,14 +193,12 @@ namespace InfiniteSigns
 		void GetSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
-            int signID = 0;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                   // signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
@@ -256,7 +252,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						SignNum[plr] = !SignNum[plr];
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr, signID);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
 						if (SignRead != null)
 							SignRead(signargs);
 						if (!signargs.Handled)
@@ -351,21 +347,19 @@ namespace InfiniteSigns
 		void ModSign(int X, int Y, int plr, string text)
 		{
 			Sign sign = null;
-            int signID = 0;
 			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account") };
-                    //signID = reader.Get<int>("rowid");
 				}
 			}
 			TSPlayer player = TShock.Players[plr];
 
 			if (sign != null)
 			{
-                SignEventArgs signargs = new SignEventArgs(X, Y, text, sign.account, plr, signID);
+                SignEventArgs signargs = new SignEventArgs(X, Y, text, sign.account, plr);
                 if (SignEdit != null)
                     SignEdit(signargs);
                 if (signargs.Handled)
@@ -386,14 +380,12 @@ namespace InfiniteSigns
 		bool TryKillSign(int X, int Y, int plr)
 		{
 			Sign sign = null;
-            int signID = 0;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				X, Y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                  //  signID = reader.Get<int>("rowid");
 				}
 			}
 			if (sign != null)
@@ -407,7 +399,7 @@ namespace InfiniteSigns
 				{
 					if (SignKill != null)
 					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr, signID);
+						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account, plr);
 						SignKill(signargs);
 						if (signargs.Handled)
 							return false;
@@ -456,20 +448,18 @@ namespace InfiniteSigns
 	}
 	public class SignEventArgs : HandledEventArgs
 	{
-		public SignEventArgs(int x, int y, string text, string account, int who, int signID)
+		public SignEventArgs(int x, int y, string text, string account, int who)
 		{
 			this.X = x;
 			this.Y = y;
 			this.text = text;
 			this.Account = account;
             this.Who = who;
-            this.SignID = signID;
 		}
 		public int X;
 		public int Y;
 		public string text;
 		public string Account;
         public int Who;
-        public int SignID;
 	}
 }
