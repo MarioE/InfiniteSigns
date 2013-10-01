@@ -6,25 +6,22 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Hooks;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
+using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 
 namespace InfiniteSigns
 {
-	[APIVersion(1, 12)]
+	[ApiVersion(1, 14)]
 	public class InfiniteSigns : TerrariaPlugin
 	{
 		public SignAction[] Action = new SignAction[256];
 		public IDbConnection Database;
 		public bool[] SignNum = new bool[256];
-		public static event Action<SignEventArgs> SignEdit;
-		public static event Action<SignEventArgs> SignKill;
-		public static event Action<SignEventArgs> SignRead;
-
+		
 		public override string Author
 		{
 			get { return "MarioE"; }
@@ -44,25 +41,25 @@ namespace InfiniteSigns
 		public InfiniteSigns(Main game)
 			: base(game)
 		{
-			Order = -1;
+			Order = 1;
 		}
 
 		protected override void Dispose(bool disposing)
 		{
 			if (disposing)
 			{
-				NetHooks.GetData -= OnGetData;
-				GameHooks.Initialize -= OnInitialize;
-				ServerHooks.Leave -= OnLeave;
+				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
+				ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
+				ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
 
 				Database.Dispose();
 			}
 		}
 		public override void Initialize()
 		{
-			NetHooks.GetData += OnGetData;
-			GameHooks.Initialize += OnInitialize;
-			ServerHooks.Leave += OnLeave;
+			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
+			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
+			ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 		}
 
 		void OnGetData(GetDataEventArgs e)
@@ -126,7 +123,7 @@ namespace InfiniteSigns
 				}
 			}
 		}
-		void OnInitialize()
+		void OnInitialize(EventArgs e)
 		{
 			Commands.ChatCommands.Add(new Command("infsigns.admin.convert", ConvertSigns, "convsigns"));
 			Commands.ChatCommands.Add(new Command("infsigns.sign.deselect", Deselect, "scset"));
@@ -162,10 +159,10 @@ namespace InfiniteSigns
 				new SqlColumn("Text", MySqlDbType.Text),
 				new SqlColumn("WorldID", MySqlDbType.Int32)));
 		}
-		void OnLeave(int index)
+		void OnLeave(LeaveEventArgs e)
 		{
-			Action[index] = SignAction.NONE;
-			SignNum[index] = false;
+			Action[e.Who] = SignAction.NONE;
+			SignNum[e.Who] = false;
 		}
 
 		void GetSign(int X, int Y, int plr)
@@ -186,32 +183,32 @@ namespace InfiniteSigns
 				switch (Action[plr])
 				{
 					case SignAction.INFO:
-						player.SendMessage(string.Format("X: {0} Y: {1} Account: {2}", X, Y, sign.account == "" ? "N/A" : sign.account), Color.Yellow);
+						player.SendInfoMessage(string.Format("X: {0} Y: {1} Account: {2}", X, Y, sign.account == "" ? "N/A" : sign.account));
 						break;
 					case SignAction.PROTECT:
 						if (sign.account != "")
 						{
-							player.SendMessage("This sign is protected.", Color.Red);
+							player.SendErrorMessage("This sign is protected.");
 							break;
 						}
 						Database.Query("UPDATE Signs SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
 							player.UserAccountName, X, Y, Main.worldID);
-						player.SendMessage("This sign is now protected.");
+						player.SendInfoMessage("This sign is now protected.");
 						break;
 					case SignAction.UNPROTECT:
 						if (sign.account == "")
 						{
-							player.SendMessage("This sign is not protected.", Color.Red);
+							player.SendErrorMessage("This sign is not protected.");
 							break;
 						}
 						if (sign.account != player.UserAccountName && !player.Group.HasPermission("infsigns.admin.editall"))
 						{
-							player.SendMessage("This sign is not yours.", Color.Red);
+							player.SendErrorMessage("This sign is not yours.");
 							break;
 						}
 						Database.Query("UPDATE Signs SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
 							X, Y, Main.worldID);
-						player.SendMessage("This sign is now unprotected.");
+						player.SendInfoMessage("This sign is now unprotected.");
 						break;
 					default:
 						if (sign.text.Length > 0 && sign.text[sign.text.Length - 1] == '\0')
@@ -229,12 +226,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw, 7, 4);
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
-						SignNum[plr] = !SignNum[plr];
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-						if (SignRead != null)
-							SignRead(signargs);
-						if (!signargs.Handled)
-							player.SendRawData(raw);
+						player.SendRawData(raw);
 						break;
 				}
 				Action[plr] = SignAction.NONE;
@@ -258,51 +250,51 @@ namespace InfiniteSigns
 				}
 				else
 				{
-					player.SendMessage("This sign is protected.", Color.Red);
+					player.SendErrorMessage("This sign is protected.");
 					player.SendTileSquare(X, Y, 5);
 					return true;
 				}
 			}
 			else
 			{
-				if (Main.tile.Valid(X - 1, Y) && Main.tile[X - 1, Y].IsSign())
+				if (TileSolid(X - 1, Y) && Main.tile[X - 1, Y].IsSign())
 				{
 					positions.Add(Sign.GetSign(X - 1, Y));
 				}
-				if (Main.tile.Valid(X + 1, Y) && Main.tile[X + 1, Y].IsSign())
+				if (TileSolid(X + 1, Y) && Main.tile[X + 1, Y].IsSign())
 				{
 					positions.Add(Sign.GetSign(X + 1, Y));
 				}
-				if (Main.tile.Valid(X, Y - 1) && Main.tile[X, Y - 1].IsSign())
+				if (TileSolid(X, Y - 1) && Main.tile[X, Y - 1].IsSign())
 				{
 					positions.Add(Sign.GetSign(X, Y - 1));
 				}
-				if (Main.tile.Valid(X, Y + 1) && Main.tile[X, Y + 1].IsSign())
+				if (TileSolid(X, Y + 1) && Main.tile[X, Y + 1].IsSign())
 				{
 					positions.Add(Sign.GetSign(X, Y + 1));
 				}
 				bool killTile = true;
 				foreach (Point p in positions)
 				{
-					attached[0] = Main.tile.Valid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
-						&& Main.tile.Valid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
-					attached[1] = Main.tile.Valid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
-						&& Main.tile.Valid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
-					attached[2] = Main.tile.Valid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
-						&& Main.tile.Valid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
-					attached[3] = Main.tile.Valid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
-						&& Main.tile.Valid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
-					bool prev = Main.tile[X, Y].active;
-					Main.tile[X, Y].active = false;
-					attachedNext[0] = Main.tile.Valid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
-						&& Main.tile.Valid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
-					attachedNext[1] = Main.tile.Valid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
-						&& Main.tile.Valid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
-					attachedNext[2] = Main.tile.Valid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
-						&& Main.tile.Valid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
-					attachedNext[3] = Main.tile.Valid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
-						&& Main.tile.Valid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
-					Main.tile[X, Y].active = prev;
+					attached[0] = TileSolid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
+						&& TileSolid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
+					attached[1] = TileSolid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
+						&& TileSolid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
+					attached[2] = TileSolid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
+						&& TileSolid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
+					attached[3] = TileSolid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
+						&& TileSolid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
+					bool prev = Main.tile[X, Y].active();
+					Main.tile[X, Y].active(false);
+					attachedNext[0] = TileSolid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
+						&& TileSolid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
+					attachedNext[1] = TileSolid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
+						&& TileSolid(p.X + 1, p.Y - 1) && Main.tile[p.X + 1, p.Y - 1].IsSolid();
+					attachedNext[2] = TileSolid(p.X - 1, p.Y) && Main.tile[p.X - 1, p.Y].IsSolid()
+						&& TileSolid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
+					attachedNext[3] = TileSolid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
+						&& TileSolid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
+					Main.tile[X, Y].active(prev);
 					if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
 					{
 						continue;
@@ -314,7 +306,7 @@ namespace InfiniteSigns
 					}
 					else
 					{
-						player.SendMessage("This sign is protected.", Color.Red);
+						player.SendErrorMessage("This sign is protected.");
 						player.SendTileSquare(X, Y, 5);
 						killTile = false;
 					}
@@ -339,17 +331,11 @@ namespace InfiniteSigns
 			{
 				if (sign.account != player.UserAccountName && sign.account != "" && !player.Group.HasPermission("infsigns.admin.editall"))
 				{
-					player.SendMessage("This sign is protected.", Color.Red);
+					player.SendErrorMessage("This sign is protected.");
 				}
 				else
 				{
-					SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-					if (SignEdit != null)
-						SignEdit(signargs);
-					if (signargs.Handled)
-						player.SendMessage("Another plugin is preventing the sign from being edited.", Color.Red);
-					else
-						Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
+					Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
 				}
 			}
 		}
@@ -359,6 +345,10 @@ namespace InfiniteSigns
 			Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
 				X, Y, (player.IsLoggedIn && player.Group.HasPermission("infsigns.sign.protect")) ? player.UserAccountName : "", Main.worldID);
 			Main.sign[999] = null;
+		}
+		bool TileSolid(int X, int Y)
+		{
+			return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null && Main.tile[X, Y].type != 127;
 		}
 		bool TryKillSign(int X, int Y, int plr)
 		{
@@ -378,16 +368,6 @@ namespace InfiniteSigns
 				{
 					return false;
 				}
-				else
-				{
-					if (SignKill != null)
-					{
-						SignEventArgs signargs = new SignEventArgs(X, Y, sign.text, sign.account);
-						SignKill(signargs);
-						if (signargs.Handled)
-							return false;
-					}
-				}
 			}
 			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
 			return true;
@@ -406,41 +386,27 @@ namespace InfiniteSigns
 					converted++;
 				}
 			}
-			e.Player.SendMessage("Converted " + converted + " signs.", Color.Green);
+			e.Player.SendSuccessMessage("Converted " + converted + " signs.");
 		}
 		void Deselect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.NONE;
-			e.Player.SendMessage("Stopped selecting a sign.", Color.Yellow);
+			e.Player.SendInfoMessage("Stopped selecting a sign.");
 		}
 		void Info(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.INFO;
-			e.Player.SendMessage("Read a sign to get its info.", Color.Green);
+			e.Player.SendInfoMessage("Read a sign to get its info.");
 		}
 		void Protect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.PROTECT;
-			e.Player.SendMessage("Read a sign to protect it.", Color.Green);
+			e.Player.SendInfoMessage("Read a sign to protect it.");
 		}
 		void Unprotect(CommandArgs e)
 		{
 			Action[e.Player.Index] = SignAction.UNPROTECT;
-			e.Player.SendMessage("Read a sign to unprotect it.", Color.Green);
+			e.Player.SendInfoMessage("Read a sign to unprotect it.");
 		}
-	}
-	public class SignEventArgs : HandledEventArgs
-	{
-		public SignEventArgs(int x, int y, string text, string account)
-		{
-			this.X = x;
-			this.Y = y;
-			this.text = text;
-			this.Account = account;
-		}
-		public int X;
-		public int Y;
-		public string text;
-		public string Account;
 	}
 }

@@ -29,7 +29,11 @@ namespace InfiniteSigns
 		}
 		static bool SignOn(int X, int Y)
 		{
-			return Main.tile.Valid(X, Y) && Main.tile[X, Y].IsSign();
+			return TileSolid(X, Y) && Main.tile[X, Y].IsSign();
+		}
+		static bool TileSolid(int X, int Y)
+		{
+			return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null && Main.tile[X, Y].type != 127;
 		}
 	}
 
