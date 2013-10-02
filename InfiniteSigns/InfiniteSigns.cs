@@ -21,7 +21,7 @@ namespace InfiniteSigns
 		public SignAction[] Action = new SignAction[256];
 		public IDbConnection Database;
 		public bool[] SignNum = new bool[256];
-		
+        
 		public override string Author
 		{
 			get { return "MarioE"; }
@@ -100,24 +100,37 @@ namespace InfiniteSigns
 									e.Handled = KillSign(X, Y, e.Msg.whoAmI);
 								}
 							}
-							else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
-							{
-								if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
-								{
-									WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
-									NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
-									if (Main.tile[X, Y].frameY != 0)
-									{
-										Y--;
-									}
-									if (Main.tile[X, Y].frameX % 36 != 0)
-									{
-										X--;
-									}
-									PlaceSign(X, Y, e.Msg.whoAmI);
-									e.Handled = true;
-								}
-							}
+                            else if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 1 && (Main.tile[X,Y].type == 55 || Main.tile[X,Y].type == 85)) // sign hit
+                            {
+                                Point signPos = Sign.GetSign(X, Y);
+                                Sign sign = null;
+                                using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                                    signPos.X, signPos.Y, Main.worldID))
+                                {
+                                    if (reader.Read())
+                                    {
+                                        sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
+                                    }
+                                }
+                            }
+                            else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
+                            {
+                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
+                                {
+                                    WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
+                                    if (Main.tile[X, Y].frameY != 0)
+                                    {
+                                        Y--;
+                                    }
+                                    if (Main.tile[X, Y].frameX % 36 != 0)
+                                    {
+                                        X--;
+                                    }
+                                    PlaceSign(X, Y, e.Msg.whoAmI);
+                                    e.Handled = true;
+                                }
+                            }
 						}
 						break;
 				}
@@ -183,7 +196,7 @@ namespace InfiniteSigns
 				switch (Action[plr])
 				{
 					case SignAction.INFO:
-						player.SendInfoMessage(string.Format("X: {0} Y: {1} Account: {2}", X, Y, sign.account == "" ? "N/A" : sign.account));
+						player.SendInfoMessage("X: {0} Y: {1} Account: {2}", X, Y, sign.account == "" ? "N/A" : sign.account);
 						break;
 					case SignAction.PROTECT:
 						if (sign.account != "")
@@ -227,6 +240,7 @@ namespace InfiniteSigns
 						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						player.SendRawData(raw);
+						SignNum[plr] = !SignNum[plr];
 						break;
 				}
 				Action[plr] = SignAction.NONE;
@@ -386,7 +400,7 @@ namespace InfiniteSigns
 					converted++;
 				}
 			}
-			e.Player.SendSuccessMessage("Converted " + converted + " signs.");
+			e.Player.SendSuccessMessage("Converted {0} signs.", converted);
 		}
 		void Deselect(CommandArgs e)
 		{
