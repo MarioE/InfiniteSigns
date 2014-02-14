@@ -15,7 +15,7 @@ using TShockAPI.DB;
 
 namespace InfiniteSigns
 {
-	[ApiVersion(1, 14)]
+	[ApiVersion(1, 15)]
 	public class InfiniteSigns : TerrariaPlugin
 	{
 		public SignAction[] Action = new SignAction[256];
@@ -66,73 +66,60 @@ namespace InfiniteSigns
 		{
 			if (!e.Handled)
 			{
-				switch (e.MsgID)
+				using (var reader = new BinaryReader(new MemoryStream(e.Msg.readBuffer, e.Index, e.Length)))
 				{
-					case PacketTypes.SignNew:
-						{
-							int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 2);
-							int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 6);
-							string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 11);
-							ModSign(X, Y, e.Msg.whoAmI, text);
-							e.Handled = true;
-						}
-						break;
-					case PacketTypes.SignRead:
-						{
-							int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
-							int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-							GetSign(X, Y, e.Msg.whoAmI);
-							e.Handled = true;
-						}
-						break;
-					case PacketTypes.Tile:
-						{
-							int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-							int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-							if (X < 0 || Y < 0 || X >= Main.maxTilesX || Y >= Main.maxTilesY)
+					switch (e.MsgID)
+					{
+						case PacketTypes.SignNew:
 							{
-								return;
+								reader.ReadInt16();
+								int x = reader.ReadInt32();
+								int y = reader.ReadInt32();
+								string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 11);
+								ModSign(x, y, e.Msg.whoAmI, text);
+								e.Handled = true;
 							}
-							if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 0)
+							break;
+						case PacketTypes.SignRead:
 							{
-								if (Sign.Nearby(X, Y))
+								int x = reader.ReadInt32();
+								int y = reader.ReadInt32();
+								GetSign(x, y, e.Msg.whoAmI);
+								e.Handled = true;
+							}
+							break;
+						case PacketTypes.Tile:
+							{
+								byte action = reader.ReadByte();
+								int x = reader.ReadInt32();
+								int y = reader.ReadInt32();
+								ushort type = reader.ReadUInt16();
+
+								if (x < 0 || y < 0 || x >= Main.maxTilesX || y >= Main.maxTilesY)
+									return;
+
+								if (action == 0 && type == 0)
 								{
-									e.Handled = KillSign(X, Y, e.Msg.whoAmI);
+									if (Sign.Nearby(x, y))
+										e.Handled = KillSign(x, y, e.Msg.whoAmI);
+								}
+								else if (action == 1 && (type == 55 || type == 85))
+								{
+									if (TShock.Regions.CanBuild(x, y, TShock.Players[e.Msg.whoAmI]))
+									{
+										WorldGen.PlaceSign(x, y, type);
+										NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, x, y, type);
+										if (Main.tile[x, y].frameY != 0)
+											y--;
+										if (Main.tile[x, y].frameX % 36 != 0)
+											x--;
+										PlaceSign(x, y, e.Msg.whoAmI);
+										e.Handled = true;
+									}
 								}
 							}
-                            else if (e.Msg.readBuffer[e.Index] == 0 && e.Msg.readBuffer[e.Index + 9] == 1 && (Main.tile[X,Y].type == 55 || Main.tile[X,Y].type == 85)) // sign hit
-                            {
-                                Point signPos = Sign.GetSign(X, Y);
-                                Sign sign = null;
-                                using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                                    signPos.X, signPos.Y, Main.worldID))
-                                {
-                                    if (reader.Read())
-                                    {
-                                        sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-                                    }
-                                }
-                            }
-                            else if (e.Msg.readBuffer[e.Index] == 1 && (e.Msg.readBuffer[e.Index + 9] == 55 || e.Msg.readBuffer[e.Index + 9] == 85))
-                            {
-                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
-                                {
-                                    WorldGen.PlaceSign(X, Y, e.Msg.readBuffer[e.Index + 9]);
-                                    NetMessage.SendData(17, -1, e.Msg.whoAmI, "", 1, X, Y, e.Msg.readBuffer[e.Index + 9]);
-                                    if (Main.tile[X, Y].frameY != 0)
-                                    {
-                                        Y--;
-                                    }
-                                    if (Main.tile[X, Y].frameX % 36 != 0)
-                                    {
-                                        X--;
-                                    }
-                                    PlaceSign(X, Y, e.Msg.whoAmI);
-                                    e.Handled = true;
-                                }
-                            }
-						}
-						break;
+							break;
+					}
 				}
 			}
 		}
@@ -178,11 +165,11 @@ namespace InfiniteSigns
 			SignNum[e.Who] = false;
 		}
 
-		void GetSign(int X, int Y, int plr)
+		void GetSign(int x, int y, int plr)
 		{
 			Sign sign = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				X, Y, Main.worldID))
+				x, y, Main.worldID))
 			{
 				if (reader.Read())
 				{
@@ -196,7 +183,7 @@ namespace InfiniteSigns
 				switch (Action[plr])
 				{
 					case SignAction.INFO:
-						player.SendInfoMessage("X: {0} Y: {1} Account: {2}", X, Y, sign.account == "" ? "N/A" : sign.account);
+						player.SendInfoMessage("X: {0} Y: {1} Account: {2}", x, y, sign.account == "" ? "N/A" : sign.account);
 						break;
 					case SignAction.PROTECT:
 						if (sign.account != "")
@@ -205,7 +192,7 @@ namespace InfiniteSigns
 							break;
 						}
 						Database.Query("UPDATE Signs SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							player.UserAccountName, X, Y, Main.worldID);
+							player.UserAccountName, x, y, Main.worldID);
 						player.SendInfoMessage("This sign is now protected.");
 						break;
 					case SignAction.UNPROTECT:
@@ -220,7 +207,7 @@ namespace InfiniteSigns
 							break;
 						}
 						Database.Query("UPDATE Signs SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							X, Y, Main.worldID);
+							x, y, Main.worldID);
 						player.SendInfoMessage("This sign is now unprotected.");
 						break;
 					default:
@@ -236,8 +223,8 @@ namespace InfiniteSigns
 							raw[5] = 1;
 						}
 						raw[4] = 47;
-						Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw, 7, 4);
-						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw, 11, 4);
+						Buffer.BlockCopy(BitConverter.GetBytes(x), 0, raw, 7, 4);
+						Buffer.BlockCopy(BitConverter.GetBytes(y), 0, raw, 11, 4);
 						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
 						player.SendRawData(raw);
 						SignNum[plr] = !SignNum[plr];
@@ -246,46 +233,46 @@ namespace InfiniteSigns
 				Action[plr] = SignAction.NONE;
 			}
 		}
-		bool KillSign(int X, int Y, int plr)
+		bool KillSign(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
 
 			bool[] attached = new bool[4];
 			bool[] attachedNext = new bool[4];
 			List<Point> positions = new List<Point>();
-			if (Main.tile[X, Y].IsSign())
+			if (Main.tile[x, y].IsSign())
 			{
-				positions.Add(Sign.GetSign(X, Y));
+				positions.Add(Sign.GetSign(x, y));
 				if (TryKillSign(positions[0].X, positions[0].Y, plr))
 				{
-					WorldGen.KillTile(X, Y);
-					TSPlayer.All.SendTileSquare(X, Y, 3);
+					WorldGen.KillTile(x, y);
+					TSPlayer.All.SendTileSquare(x, y, 3);
 					return true;
 				}
 				else
 				{
 					player.SendErrorMessage("This sign is protected.");
-					player.SendTileSquare(X, Y, 5);
+					player.SendTileSquare(x, y, 5);
 					return true;
 				}
 			}
 			else
 			{
-				if (TileSolid(X - 1, Y) && Main.tile[X - 1, Y].IsSign())
+				if (TileSolid(x - 1, y) && Main.tile[x - 1, y].IsSign())
 				{
-					positions.Add(Sign.GetSign(X - 1, Y));
+					positions.Add(Sign.GetSign(x - 1, y));
 				}
-				if (TileSolid(X + 1, Y) && Main.tile[X + 1, Y].IsSign())
+				if (TileSolid(x + 1, y) && Main.tile[x + 1, y].IsSign())
 				{
-					positions.Add(Sign.GetSign(X + 1, Y));
+					positions.Add(Sign.GetSign(x + 1, y));
 				}
-				if (TileSolid(X, Y - 1) && Main.tile[X, Y - 1].IsSign())
+				if (TileSolid(x, y - 1) && Main.tile[x, y - 1].IsSign())
 				{
-					positions.Add(Sign.GetSign(X, Y - 1));
+					positions.Add(Sign.GetSign(x, y - 1));
 				}
-				if (TileSolid(X, Y + 1) && Main.tile[X, Y + 1].IsSign())
+				if (TileSolid(x, y + 1) && Main.tile[x, y + 1].IsSign())
 				{
-					positions.Add(Sign.GetSign(X, Y + 1));
+					positions.Add(Sign.GetSign(x, y + 1));
 				}
 				bool killTile = true;
 				foreach (Point p in positions)
@@ -298,8 +285,8 @@ namespace InfiniteSigns
 						&& TileSolid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
 					attached[3] = TileSolid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
 						&& TileSolid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
-					bool prev = Main.tile[X, Y].active();
-					Main.tile[X, Y].active(false);
+					bool prev = Main.tile[x, y].active();
+					Main.tile[x, y].active(false);
 					attachedNext[0] = TileSolid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
 						&& TileSolid(p.X + 1, p.Y + 2) && Main.tile[p.X + 1, p.Y + 2].IsSolid();
 					attachedNext[1] = TileSolid(p.X, p.Y - 1) && Main.tile[p.X, p.Y - 1].IsSolid()
@@ -308,7 +295,7 @@ namespace InfiniteSigns
 						&& TileSolid(p.X - 1, p.Y + 1) && Main.tile[p.X - 1, p.Y + 1].IsSolid();
 					attachedNext[3] = TileSolid(p.X + 2, p.Y) && Main.tile[p.X + 2, p.Y].IsSolid()
 						&& TileSolid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
-					Main.tile[X, Y].active(prev);
+					Main.tile[x, y].active(prev);
 					if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
 					{
 						continue;
@@ -321,18 +308,18 @@ namespace InfiniteSigns
 					else
 					{
 						player.SendErrorMessage("This sign is protected.");
-						player.SendTileSquare(X, Y, 5);
+						player.SendTileSquare(x, y, 5);
 						killTile = false;
 					}
 				}
 				return !killTile;
 			}
 		}
-		void ModSign(int X, int Y, int plr, string text)
+		void ModSign(int x, int y, int plr, string text)
 		{
 			Sign sign = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				X, Y, Main.worldID))
+				x, y, Main.worldID))
 			{
 				if (reader.Read())
 				{
@@ -349,26 +336,26 @@ namespace InfiniteSigns
 				}
 				else
 				{
-					Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, X, Y, Main.worldID);
+					Database.Query("UPDATE Signs SET Text = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", text, x, y, Main.worldID);
 				}
 			}
 		}
-		void PlaceSign(int X, int Y, int plr)
+		void PlaceSign(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
 			Database.Query("INSERT INTO Signs (X, Y, Account, Text, WorldID) VALUES (@0, @1, @2, '', @3)",
-				X, Y, (player.IsLoggedIn && player.Group.HasPermission("infsigns.sign.protect")) ? player.UserAccountName : "", Main.worldID);
+				x, y, (player.IsLoggedIn && player.Group.HasPermission("infsigns.sign.protect")) ? player.UserAccountName : "", Main.worldID);
 			Main.sign[999] = null;
 		}
-		bool TileSolid(int X, int Y)
+		bool TileSolid(int x, int y)
 		{
-			return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null && Main.tile[X, Y].type != 127;
+			return x >= 0 && y >= 0 && x < Main.maxTilesX && y < Main.maxTilesY && Main.tile[x, y] != null && Main.tile[x, y].type != 127;
 		}
-		bool TryKillSign(int X, int Y, int plr)
+		bool TryKillSign(int x, int y, int plr)
 		{
 			Sign sign = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Text FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				X, Y, Main.worldID))
+				x, y, Main.worldID))
 			{
 				if (reader.Read())
 				{
@@ -383,7 +370,7 @@ namespace InfiniteSigns
 					return false;
 				}
 			}
-			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", X, Y, Main.worldID);
+			Database.Query("DELETE FROM Signs WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
 			return true;
 		}
 
