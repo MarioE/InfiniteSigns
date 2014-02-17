@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
@@ -50,6 +51,7 @@ namespace InfiniteSigns
 			{
 				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
 				ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
+				ServerApi.Hooks.GamePostInitialize.Deregister(this, OnPostInitialize);
 				ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
 
 				Database.Dispose();
@@ -59,6 +61,7 @@ namespace InfiniteSigns
 		{
 			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
 			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
+			ServerApi.Hooks.GamePostInitialize.Register(this, OnPostInitialize);
 			ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 		}
 
@@ -76,7 +79,7 @@ namespace InfiniteSigns
 								int x = reader.ReadInt32();
 								int y = reader.ReadInt32();
 								string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 11);
-								ModSign(x, y, e.Msg.whoAmI, text);
+								Task.Factory.StartNew(() => ModSign(x, y, e.Msg.whoAmI, text));
 								e.Handled = true;
 							}
 							break;
@@ -84,7 +87,7 @@ namespace InfiniteSigns
 							{
 								int x = reader.ReadInt32();
 								int y = reader.ReadInt32();
-								GetSign(x, y, e.Msg.whoAmI);
+								Task.Factory.StartNew(() => GetSign(x, y, e.Msg.whoAmI));
 								e.Handled = true;
 							}
 							break;
@@ -101,7 +104,10 @@ namespace InfiniteSigns
 								if (action == 0 && type == 0)
 								{
 									if (Sign.Nearby(x, y))
-										e.Handled = KillSign(x, y, e.Msg.whoAmI);
+									{
+										Task.Factory.StartNew(() => KillSign(x, y, e.Msg.whoAmI));
+										e.Handled = true;
+									}
 								}
 								else if (action == 1 && (type == 55 || type == 85))
 								{
@@ -113,7 +119,7 @@ namespace InfiniteSigns
 											y--;
 										if (Main.tile[x, y].frameX % 36 != 0)
 											x--;
-										PlaceSign(x, y, e.Msg.whoAmI);
+										Task.Factory.StartNew(() => PlaceSign(x, y, e.Msg.whoAmI));
 										e.Handled = true;
 									}
 								}
@@ -129,6 +135,7 @@ namespace InfiniteSigns
 			Commands.ChatCommands.Add(new Command("infsigns.sign.deselect", Deselect, "scset"));
 			Commands.ChatCommands.Add(new Command("infsigns.admin.info", Info, "sinfo"));
 			Commands.ChatCommands.Add(new Command("infsigns.sign.protect", Protect, "sset"));
+			Commands.ChatCommands.Add(new Command("infsigns.admin.prune", Prune, "prunesigns"));
 			Commands.ChatCommands.Add(new Command("infsigns.sign.unprotect", Unprotect, "sunset"));
 
 			switch (TShock.Config.StorageType.ToLower())
@@ -163,6 +170,24 @@ namespace InfiniteSigns
 		{
 			Action[e.Who] = SignAction.NONE;
 			SignNum[e.Who] = false;
+		}
+		void OnPostInitialize(EventArgs e)
+		{
+			int converted = 0;
+			foreach (Terraria.Sign s in Main.sign)
+			{
+				if (s != null)
+				{
+					Database.Query("INSERT INTO Signs (X, Y, Text, WorldID) VALUES (@0, @1, @2, @3)",
+						s.x, s.y, s.text, Main.worldID);
+					converted++;
+				}
+			}
+			if (converted > 0)
+			{
+				TSPlayer.Server.SendSuccessMessage("Converted {0} sign{1}.", converted, converted == 1 ? "" : "s");
+				WorldFile.saveWorld();
+			}
 		}
 
 		void GetSign(int x, int y, int plr)
@@ -233,48 +258,38 @@ namespace InfiniteSigns
 				Action[plr] = SignAction.NONE;
 			}
 		}
-		bool KillSign(int x, int y, int plr)
+		void KillSign(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
 
 			bool[] attached = new bool[4];
 			bool[] attachedNext = new bool[4];
-			List<Point> positions = new List<Point>();
+			var positions = new List<Point>();
 			if (Main.tile[x, y].IsSign())
 			{
-				positions.Add(Sign.GetSign(x, y));
-				if (TryKillSign(positions[0].X, positions[0].Y, plr))
+				if (TryKillSign(Sign.GetSign(x, y).X, Sign.GetSign(x, y).Y, plr))
 				{
 					WorldGen.KillTile(x, y);
 					TSPlayer.All.SendTileSquare(x, y, 3);
-					return true;
+					return;
 				}
 				else
 				{
 					player.SendErrorMessage("This sign is protected.");
 					player.SendTileSquare(x, y, 5);
-					return true;
+					return;
 				}
 			}
 			else
 			{
 				if (TileSolid(x - 1, y) && Main.tile[x - 1, y].IsSign())
-				{
 					positions.Add(Sign.GetSign(x - 1, y));
-				}
 				if (TileSolid(x + 1, y) && Main.tile[x + 1, y].IsSign())
-				{
 					positions.Add(Sign.GetSign(x + 1, y));
-				}
 				if (TileSolid(x, y - 1) && Main.tile[x, y - 1].IsSign())
-				{
 					positions.Add(Sign.GetSign(x, y - 1));
-				}
 				if (TileSolid(x, y + 1) && Main.tile[x, y + 1].IsSign())
-				{
 					positions.Add(Sign.GetSign(x, y + 1));
-				}
-				bool killTile = true;
 				foreach (Point p in positions)
 				{
 					attached[0] = TileSolid(p.X, p.Y + 2) && Main.tile[p.X, p.Y + 2].IsSolid()
@@ -297,9 +312,7 @@ namespace InfiniteSigns
 						&& TileSolid(p.X + 2, p.Y + 1) && Main.tile[p.X + 2, p.Y + 1].IsSolid();
 					Main.tile[x, y].active(prev);
 					if (attached.Count(b => b) > 1 || attached.Count(b => b) == attachedNext.Count(b => b))
-					{
 						continue;
-					}
 					if (TryKillSign(p.X, p.Y, plr))
 					{
 						WorldGen.KillTile(p.X, p.Y);
@@ -309,10 +322,8 @@ namespace InfiniteSigns
 					{
 						player.SendErrorMessage("This sign is protected.");
 						player.SendTileSquare(x, y, 5);
-						killTile = false;
 					}
 				}
-				return !killTile;
 			}
 		}
 		void ModSign(int x, int y, int plr, string text)
@@ -358,9 +369,7 @@ namespace InfiniteSigns
 				x, y, Main.worldID))
 			{
 				if (reader.Read())
-				{
 					sign = new Sign { account = reader.Get<string>("Account"), text = reader.Get<string>("Text") };
-				}
 			}
 			if (sign != null)
 			{
@@ -376,18 +385,22 @@ namespace InfiniteSigns
 
 		void ConvertSigns(CommandArgs e)
 		{
-			Database.Query("DELETE FROM Signs WHERE WorldID = @0", Main.worldID);
-			int converted = 0;
-			foreach (Terraria.Sign s in Main.sign)
-			{
-				if (s != null)
+			Task.Factory.StartNew(() =>
 				{
-					Database.Query("INSERT INTO Signs (X, Y, Text, WorldID) VALUES (@0, @1, @2, @3)",
-						s.x, s.y, s.text, Main.worldID);
-					converted++;
-				}
-			}
-			e.Player.SendSuccessMessage("Converted {0} signs.", converted);
+					int converted = 0;
+					foreach (Terraria.Sign s in Main.sign)
+					{
+						if (s != null)
+						{
+							Database.Query("INSERT INTO Signs (X, Y, Text, WorldID) VALUES (@0, @1, @2, @3)",
+								s.x, s.y, s.text, Main.worldID);
+							converted++;
+						}
+					}
+					e.Player.SendSuccessMessage("Converted {0} sign{1}.", converted, converted == 1 ? "" : "s");
+					if (converted > 0)
+						WorldFile.saveWorld();
+				});
 		}
 		void Deselect(CommandArgs e)
 		{
@@ -403,6 +416,27 @@ namespace InfiniteSigns
 		{
 			Action[e.Player.Index] = SignAction.PROTECT;
 			e.Player.SendInfoMessage("Read a sign to protect it.");
+		}
+		void Prune(CommandArgs e)
+		{
+			Task.Factory.StartNew(() =>
+			{
+				using (var reader = Database.QueryReader("SELECT X, Y FROM Signs WHERE Text = '' AND WorldID = @0", Main.worldID))
+				{
+					while (reader.Read())
+					{
+						int x = reader.Get<int>("X");
+						int y = reader.Get<int>("Y");
+						WorldGen.KillTile(x, y);
+						TSPlayer.All.SendTileSquare(x, y, 3);
+					}
+				}
+
+				int count = Database.Query("DELETE FROM Signs WHERE Text = '' AND WorldID = @0", Main.worldID);
+				e.Player.SendSuccessMessage("Pruned {0} sign{1}.", count, count == 1 ? "" : "s");
+				if (count > 0)
+					WorldFile.saveWorld();
+			});
 		}
 		void Unprotect(CommandArgs e)
 		{
