@@ -185,7 +185,7 @@ namespace InfiniteSigns
 			}
 			if (converted > 0)
 			{
-				TSPlayer.Server.SendSuccessMessage("Converted {0} sign{1}.", converted, converted == 1 ? "" : "s");
+				TSPlayer.Server.SendSuccessMessage("[InfiniteSigns] Converted {0} sign{1}.", converted, converted == 1 ? "" : "s");
 				WorldFile.saveWorld();
 			}
 		}
