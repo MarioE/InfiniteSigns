@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.IO;
+using System.IO.Streams;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -16,7 +17,7 @@ using TShockAPI.DB;
 
 namespace InfiniteSigns
 {
-	[ApiVersion(1, 15)]
+	[ApiVersion(1, 16)]
 	public class InfiniteSigns : TerrariaPlugin
 	{
 		public SignAction[] Action = new SignAction[256];
@@ -69,33 +70,34 @@ namespace InfiniteSigns
 		{
 			if (!e.Handled)
 			{
-				using (var reader = new BinaryReader(new MemoryStream(e.Msg.readBuffer, e.Index, e.Length)))
+				using (var reader = new MemoryStream(e.Msg.readBuffer, e.Index, e.Length))
 				{
 					switch (e.MsgID)
 					{
 						case PacketTypes.SignNew:
 							{
 								reader.ReadInt16();
-								int x = reader.ReadInt32();
-								int y = reader.ReadInt32();
-								string text = Encoding.UTF8.GetString(e.Msg.readBuffer, e.Index + 10, e.Length - 11);
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
+								string text = reader.ReadString();
 								Task.Factory.StartNew(() => ModSign(x, y, e.Msg.whoAmI, text));
 								e.Handled = true;
 							}
 							break;
 						case PacketTypes.SignRead:
 							{
-								int x = reader.ReadInt32();
-								int y = reader.ReadInt32();
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
 								Task.Factory.StartNew(() => GetSign(x, y, e.Msg.whoAmI));
+								//GetSign(x, y, e.Msg.whoAmI);
 								e.Handled = true;
 							}
 							break;
 						case PacketTypes.Tile:
 							{
-								byte action = reader.ReadByte();
-								int x = reader.ReadInt32();
-								int y = reader.ReadInt32();
+								byte action = (byte)reader.ReadByte();
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
 								ushort type = reader.ReadUInt16();
 
 								if (x < 0 || y < 0 || x >= Main.maxTilesX || y >= Main.maxTilesY)
@@ -240,18 +242,20 @@ namespace InfiniteSigns
 						{
 							sign.text = sign.text.Substring(0, sign.text.Length - 1);
 						}
-						byte[] utf8 = Encoding.UTF8.GetBytes(sign.text);
-						byte[] raw = new byte[15 + utf8.Length];
-						Buffer.BlockCopy(BitConverter.GetBytes(utf8.Length + 11), 0, raw, 0, 4);
-						if (SignNum[plr])
+						using (var writer = new MemoryStream())
 						{
-							raw[5] = 1;
+							writer.WriteInt16(0);
+							writer.WriteByte(47);
+							writer.WriteInt16((short)(SignNum[plr] ? 1 : 0));
+							writer.WriteInt16((short)x);
+							writer.WriteInt16((short)y);
+							writer.WriteString(sign.text);
+							var end = writer.Position;
+							writer.Position = 0;
+							writer.WriteInt16((short)end);
+							writer.Position = end;
+							player.SendRawData(writer.ToArray());
 						}
-						raw[4] = 47;
-						Buffer.BlockCopy(BitConverter.GetBytes(x), 0, raw, 7, 4);
-						Buffer.BlockCopy(BitConverter.GetBytes(y), 0, raw, 11, 4);
-						Buffer.BlockCopy(utf8, 0, raw, 15, utf8.Length);
-						player.SendRawData(raw);
 						SignNum[plr] = !SignNum[plr];
 						break;
 				}
