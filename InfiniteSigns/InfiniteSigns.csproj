@@ -57,6 +57,9 @@
     <Compile Include="InfiniteSigns.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Sign.cs" />
+    <Compile Include="SignAction.cs" />
+    <Compile Include="SignFlags.cs" />
+    <Compile Include="PlayerInfo.cs" />
     <Compile Include="TileExtensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

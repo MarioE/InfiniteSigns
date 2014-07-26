@@ -8,19 +8,23 @@ namespace InfiniteSigns
 {
 	public class Sign
 	{
-		public string account = "";
-		public string text = "";
+		public string Account = "";
+		public SignFlags Flags;
+		public string HashedPassword = "";
+		public int ID;
+		public string Text = "";
+
+		public bool IsRegion
+		{
+			get { return Flags.HasFlag(SignFlags.Region); }
+		}
 
 		public static Point GetSign(int X, int Y)
 		{
 			if (Main.tile[X, Y].frameY != 0)
-			{
 				Y--;
-			}
 			if (Main.tile[X, Y].frameX % 36 != 0)
-			{
 				X--;
-			}
 			return new Point(X, Y);
 		}
 		public static bool Nearby(int X, int Y)
@@ -35,13 +39,5 @@ namespace InfiniteSigns
 		{
 			return X >= 0 && Y >= 0 && X < Main.maxTilesX && Y < Main.maxTilesY && Main.tile[X, Y] != null && Main.tile[X, Y].type != 127;
 		}
-	}
-
-	public enum SignAction : byte
-	{
-		NONE,
-		PROTECT,
-		UNPROTECT,
-		INFO
 	}
 }
